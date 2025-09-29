@@ -69,6 +69,7 @@ export function Sidebar({ activeSection, onSectionChange, collapsed, onToggleCol
                   size="sm"
                   onClick={onToggleCollapse}
                   className="h-8 w-8 p-0 hover:bg-secondary"
+                  title={collapsed ? "显示面板" : "隐藏面板"}
                 >
                   {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
                 </Button>
