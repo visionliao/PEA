@@ -1,11 +1,10 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
+import { Loader2 } from "lucide-react"
 
 interface PromptFramework {
   id: string
@@ -14,45 +13,9 @@ interface PromptFramework {
   properties?: { name: string; description: string }[]
 }
 
-const frameworks: PromptFramework[] = [
-  {
-    id: "ape",
-    name: "APE",
-    description:
-      "APE是一个用于构建清晰、有效提示词的结构化框架，它由三个核心部分组成：**行动 (Action)**、**目的 (Purpose)** 和 **期望 (Expectation)**",
-    properties: [
-      { name: "行动 (Action)", description: "明确指定AI需要执行的具体任务或操作" },
-      { name: "目的 (Purpose)", description: "说明为什么需要执行这个任务，提供背景信息" },
-      { name: "期望 (Expectation)", description: "描述期望的输出格式、风格或质量标准" },
-    ],
-  },
-  {
-    id: "care",
-    name: "CARE",
-    description:
-      "CARE框架通过四个维度帮助构建高质量提示词：**上下文 (Context)**、**行动 (Action)**、**结果 (Result)** 和 **示例 (Example)**",
-    properties: [
-      { name: "上下文 (Context)", description: "提供相关背景信息和场景设定" },
-      { name: "行动 (Action)", description: "明确需要AI执行的任务" },
-      { name: "结果 (Result)", description: "描述期望的输出结果" },
-      { name: "示例 (Example)", description: "提供具体示例帮助AI理解需求" },
-    ],
-  },
-  {
-    id: "rise",
-    name: "RISE",
-    description:
-      "RISE框架专注于提升AI响应质量：**角色 (Role)**、**输入 (Input)**、**步骤 (Steps)** 和 **期望 (Expectation)**",
-    properties: [
-      { name: "角色 (Role)", description: "为AI分配特定的角色或专业身份" },
-      { name: "输入 (Input)", description: "提供必要的输入信息和数据" },
-      { name: "步骤 (Steps)", description: "说明任务执行的具体步骤" },
-      { name: "期望 (Expectation)", description: "明确期望的输出标准" },
-    ],
-  },
-]
-
 export function PromptFramework() {
+  const [frameworks, setFrameworks] = useState<PromptFramework[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedFrameworks, setSelectedFrameworks] = useState<Set<string>>(new Set())
   const [selectAll, setSelectAll] = useState(false)
   const [selectedFramework, setSelectedFramework] = useState<string | null>(null)
@@ -62,6 +25,25 @@ export function PromptFramework() {
     properties: { name: string; description: string }[]
   } | null>(null)
   const [isCreatingCustom, setIsCreatingCustom] = useState(false)
+
+  // Load frameworks from API
+  useEffect(() => {
+    const loadFrameworks = async () => {
+      try {
+        const response = await fetch("/api/prompt-frameworks")
+        if (response.ok) {
+          const data = await response.json()
+          setFrameworks(data.frameworks || [])
+        }
+      } catch (error) {
+        console.error("Failed to load frameworks:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadFrameworks()
+  }, [])
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked)
@@ -154,6 +136,20 @@ export function PromptFramework() {
     setEditingFramework(null)
   }
 
+  if (loading) {
+    return (
+      <div className="p-4 md:p-8 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto">
+        <div className="mb-6 border-b border-border pb-4 md:mb-8">
+          <h1 className="text-xl font-semibold text-foreground md:text-2xl">提示词框架</h1>
+        </div>
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">加载提示词框架...</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 md:p-8 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto">
       <div className="mb-6 border-b border-border pb-4 md:mb-8">
@@ -173,118 +169,124 @@ export function PromptFramework() {
         </div>
 
         <div className="space-y-4">
-          {frameworks.map((framework) => (
-            <div key={framework.id}>
-              <div
-                className={`grid grid-cols-[auto_1fr_auto] gap-6 items-start py-3 border-b border-border/50 cursor-pointer hover:bg-muted/30 transition-colors ${
-                  selectedFramework === framework.id ? "bg-muted/50" : ""
-                }`}
-                onClick={() => handleRowClick(framework)}
-              >
-                <div className="text-sm font-medium text-foreground min-w-[80px]">{framework.name}</div>
-                <div className="text-sm text-muted-foreground leading-relaxed">{framework.description}</div>
-                <div className="flex items-center justify-center pt-1">
-                  <Checkbox
-                    id={framework.id}
-                    checked={selectedFrameworks.has(framework.id)}
-                    onCheckedChange={(checked) => handleFrameworkToggle(framework.id, checked as boolean, event as any)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
+          {frameworks.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              暂无提示词框架
+            </div>
+          ) : (
+            frameworks.map((framework) => (
+              <div key={framework.id}>
+                <div
+                  className={`grid grid-cols-[auto_1fr_auto] gap-6 items-start py-3 border-b border-border/50 cursor-pointer hover:bg-muted/30 transition-colors ${
+                    selectedFramework === framework.id ? "bg-muted/50" : ""
+                  }`}
+                  onClick={() => handleRowClick(framework)}
+                >
+                  <div className="text-sm font-medium text-foreground min-w-[80px]">{framework.name}</div>
+                  <div className="text-sm text-muted-foreground leading-relaxed">{framework.description}</div>
+                  <div className="flex items-center justify-center pt-1">
+                    <Checkbox
+                      id={framework.id}
+                      checked={selectedFrameworks.has(framework.id)}
+                      onCheckedChange={(checked) => handleFrameworkToggle(framework.id, checked as boolean, event as any)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {selectedFramework === framework.id && editingFramework && (
-                <div className="mt-6 p-6 bg-muted/20 rounded-lg border border-border space-y-6">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-foreground">框架名称</Label>
-                    <textarea
-                      value={editingFramework.name}
-                      onChange={(e) => {
-                        setEditingFramework({ ...editingFramework, name: e.target.value })
-                        e.target.style.height = "auto"
-                        e.target.style.height = e.target.scrollHeight + "px"
-                      }}
-                      placeholder="请输入框架名称..."
-                      className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
-                      rows={1}
-                      onInput={(e) => {
-                        const target = e.target as HTMLTextAreaElement
-                        target.style.height = "auto"
-                        target.style.height = target.scrollHeight + "px"
-                      }}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-foreground">框架介绍</Label>
-                    <textarea
-                      value={editingFramework.description}
-                      onChange={(e) => {
-                        setEditingFramework({ ...editingFramework, description: e.target.value })
-                        e.target.style.height = "auto"
-                        e.target.style.height = e.target.scrollHeight + "px"
-                      }}
-                      placeholder="请输入框架的功能简介..."
-                      className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
-                      rows={1}
-                      onInput={(e) => {
-                        const target = e.target as HTMLTextAreaElement
-                        target.style.height = "auto"
-                        target.style.height = target.scrollHeight + "px"
-                      }}
-                    />
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium text-foreground">框架属性</Label>
-                      <Button
-                        onClick={handleAddProperty}
-                        variant="outline"
-                        size="sm"
-                        className="text-sm bg-transparent"
-                      >
-                        新增属性
-                      </Button>
+                {selectedFramework === framework.id && editingFramework && (
+                  <div className="mt-6 p-6 bg-muted/20 rounded-lg border border-border space-y-6">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-foreground">框架名称</Label>
+                      <textarea
+                        value={editingFramework.name}
+                        onChange={(e) => {
+                          setEditingFramework({ ...editingFramework, name: e.target.value })
+                          e.target.style.height = "auto"
+                          e.target.style.height = e.target.scrollHeight + "px"
+                        }}
+                        placeholder="请输入框架名称..."
+                        className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                        rows={1}
+                        onInput={(e) => {
+                          const target = e.target as HTMLTextAreaElement
+                          target.style.height = "auto"
+                          target.style.height = target.scrollHeight + "px"
+                        }}
+                      />
                     </div>
 
-                    {editingFramework.properties.map((property, index) => (
-                      <div key={index} className="grid grid-cols-[1fr_2fr_auto] gap-4 items-start">
-                        <input
-                          type="text"
-                          value={property.name}
-                          onChange={(e) => handlePropertyChange(index, "name", e.target.value)}
-                          placeholder="属性名称"
-                          className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
-                        />
-                        <input
-                          type="text"
-                          value={property.description}
-                          onChange={(e) => handlePropertyChange(index, "description", e.target.value)}
-                          placeholder="属性定义"
-                          className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
-                        />
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-foreground">框架介绍</Label>
+                      <textarea
+                        value={editingFramework.description}
+                        onChange={(e) => {
+                          setEditingFramework({ ...editingFramework, description: e.target.value })
+                          e.target.style.height = "auto"
+                          e.target.style.height = e.target.scrollHeight + "px"
+                        }}
+                        placeholder="请输入框架的功能简介..."
+                        className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                        rows={1}
+                        onInput={(e) => {
+                          const target = e.target as HTMLTextAreaElement
+                          target.style.height = "auto"
+                          target.style.height = target.scrollHeight + "px"
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium text-foreground">框架属性</Label>
                         <Button
-                          onClick={() => handleRemoveProperty(index)}
-                          variant="ghost"
+                          onClick={handleAddProperty}
+                          variant="outline"
                           size="sm"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="text-sm bg-transparent"
                         >
-                          删除
+                          新增属性
                         </Button>
                       </div>
-                    ))}
-                  </div>
 
-                  <div className="flex justify-end gap-3 pt-4">
-                    <Button onClick={handleSave} className="bg-foreground text-background hover:bg-foreground/90">
-                      保存
-                    </Button>
+                      {editingFramework.properties.map((property, index) => (
+                        <div key={index} className="grid grid-cols-[1fr_2fr_auto] gap-4 items-start">
+                          <input
+                            type="text"
+                            value={property.name}
+                            onChange={(e) => handlePropertyChange(index, "name", e.target.value)}
+                            placeholder="属性名称"
+                            className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
+                          />
+                          <input
+                            type="text"
+                            value={property.description}
+                            onChange={(e) => handlePropertyChange(index, "description", e.target.value)}
+                            placeholder="属性定义"
+                            className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
+                          />
+                          <Button
+                            onClick={() => handleRemoveProperty(index)}
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4">
+                      <Button onClick={handleSave} className="bg-foreground text-background hover:bg-foreground/90">
+                        保存
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            ))
+          )}
         </div>
 
         {isCreatingCustom && editingFramework && (
