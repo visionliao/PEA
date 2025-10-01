@@ -219,8 +219,11 @@ export function PromptFramework() {
     setIsSaving(true)
 
     try {
-      // 保存框架（包含存在性检查）
-      const url = showReplaceConfirm ? '/api/prompt-frameworks?force=true' : '/api/prompt-frameworks'
+      // 确定是否需要强制替换（编辑现有框架时总是需要强制替换）
+      const isEditingExisting = !isCreatingCustom && selectedFramework
+      const shouldForceReplace = isEditingExisting || showReplaceConfirm
+
+      const url = shouldForceReplace ? '/api/prompt-frameworks?force=true' : '/api/prompt-frameworks'
       const saveResponse = await fetch(url, {
         method: 'POST',
         headers: {
@@ -232,7 +235,7 @@ export function PromptFramework() {
       const saveData = await saveResponse.json()
 
       if (saveData.success) {
-        // 动态更新框架列表
+        // 更新框架列表
         const newFramework: PromptFramework = {
           id: editingFramework!.name.toLowerCase().replace(/\s+/g, '-'),
           name: editingFramework!.name,
@@ -240,7 +243,16 @@ export function PromptFramework() {
           properties: editingFramework!.properties,
         }
 
-        setFrameworks(prev => [...prev, newFramework])
+        if (isEditingExisting) {
+          // 编辑现有框架时替换原框架
+          setFrameworks(prev => prev.map(f => f.id === selectedFramework ? newFramework : f))
+        } else if (showReplaceConfirm) {
+          // 创建新框架但确认替换时，替换同名框架
+          setFrameworks(prev => prev.map(f => f.name === editingFramework!.name ? newFramework : f))
+        } else {
+          // 创建新框架时添加到列表
+          setFrameworks(prev => [...prev, newFramework])
+        }
 
         alert("保存成功！")
         setIsCreatingCustom(false)
@@ -248,7 +260,8 @@ export function PromptFramework() {
         setEditingFramework(null)
         setValidationErrors({})
         setShowReplaceConfirm(false)
-      } else if (saveData.exists) {
+      } else if (saveData.exists && !isEditingExisting) {
+        // 只有创建新框架时才需要确认替换
         if (!showReplaceConfirm) {
           setShowReplaceConfirm(true)
           setIsSaving(false)
@@ -494,15 +507,6 @@ export function PromptFramework() {
                       >
                         取消
                       </Button>
-                      {showReplaceConfirm && (
-                        <Button
-                          onClick={() => setShowReplaceConfirm(false)}
-                          variant="outline"
-                          className="bg-transparent"
-                        >
-                          取消
-                        </Button>
-                      )}
                       <Button
                         onClick={handleSave}
                         className="bg-foreground text-background hover:bg-foreground/90"
@@ -649,15 +653,6 @@ export function PromptFramework() {
               >
                 取消
               </Button>
-              {showReplaceConfirm && (
-                <Button
-                  onClick={() => setShowReplaceConfirm(false)}
-                  variant="outline"
-                  className="bg-transparent"
-                >
-                  取消
-                </Button>
-              )}
               <Button
                 onClick={handleSave}
                 className="bg-foreground text-background hover:bg-foreground/90"
