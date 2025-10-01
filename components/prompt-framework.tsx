@@ -162,8 +162,8 @@ export function PromptFramework() {
 
       <div className="space-y-6">
         <div className="grid grid-cols-[auto_1fr_auto] gap-6 pb-3 border-b border-border">
-          <Label className="text-sm font-medium text-foreground">提示词框架</Label>
-          <Label className="text-sm font-medium text-foreground">简介</Label>
+          <Label className="text-sm font-medium text-foreground min-w-[80px]">框架名称</Label>
+          <Label className="text-sm font-medium text-foreground">框架简介</Label>
           <div className="flex items-center gap-2">
             <Checkbox id="select-all" checked={selectAll} onCheckedChange={handleSelectAll} />
             <Label htmlFor="select-all" className="text-sm font-medium text-foreground cursor-pointer">
@@ -196,7 +196,7 @@ export function PromptFramework() {
               {selectedFramework === framework.id && editingFramework && (
                 <div className="mt-6 p-6 bg-muted/20 rounded-lg border border-border space-y-6">
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium text-foreground">提示词框架</Label>
+                    <Label className="text-sm font-medium text-foreground">框架名称</Label>
                     <textarea
                       value={editingFramework.name}
                       onChange={(e) => {
@@ -216,7 +216,7 @@ export function PromptFramework() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium text-foreground">框架功能简介</Label>
+                    <Label className="text-sm font-medium text-foreground">框架介绍</Label>
                     <textarea
                       value={editingFramework.description}
                       onChange={(e) => {
@@ -261,7 +261,7 @@ export function PromptFramework() {
                           type="text"
                           value={property.description}
                           onChange={(e) => handlePropertyChange(index, "description", e.target.value)}
-                          placeholder="功能介绍"
+                          placeholder="属性定义"
                           className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
                         />
                         <Button
@@ -290,7 +290,7 @@ export function PromptFramework() {
         {isCreatingCustom && editingFramework && (
           <div className="mt-6 p-6 bg-muted/20 rounded-lg border border-border space-y-6">
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">提示词框架</Label>
+              <Label className="text-sm font-medium text-foreground">框架名称</Label>
               <textarea
                 value={editingFramework.name}
                 onChange={(e) => {
@@ -310,7 +310,7 @@ export function PromptFramework() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">框架功能简介</Label>
+              <Label className="text-sm font-medium text-foreground">框架介绍</Label>
               <textarea
                 value={editingFramework.description}
                 onChange={(e) => {
@@ -350,7 +350,7 @@ export function PromptFramework() {
                     type="text"
                     value={property.description}
                     onChange={(e) => handlePropertyChange(index, "description", e.target.value)}
-                    placeholder="功能介绍"
+                    placeholder="属性定义"
                     className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
                   />
                   <Button
