@@ -322,6 +322,9 @@ export function PromptFramework() {
           <Label className="text-sm font-medium text-foreground min-w-[80px]">框架名称</Label>
           <Label className="text-sm font-medium text-foreground">框架简介</Label>
           <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground min-w-[20px] text-right">
+              {selectedFrameworks.size}
+            </span>
             <Checkbox id="select-all" checked={selectAll} onCheckedChange={handleSelectAll} />
             <Label htmlFor="select-all" className="text-sm font-medium text-foreground cursor-pointer">
               全选
