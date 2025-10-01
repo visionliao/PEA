@@ -138,7 +138,7 @@ export function ProjectOverview() {
 
         // 处理 MCP Tools
         if (projectData.mcpTools && projectData.mcpTools.length > 0) {
-          const toolsWithIds = projectData.mcpTools.map((tool, index) => ({
+          const toolsWithIds = projectData.mcpTools.map((tool: any, index: number) => ({
             id: `loaded-${Date.now()}-${index}`,
             methodName: tool.methodName || "",
             methodParams: tool.methodParams || "",

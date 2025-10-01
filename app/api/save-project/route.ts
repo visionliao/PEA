@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     // 生成MCP Tools的JSON格式数据
-    const mcpToolsJson = mcpTools.map(tool => ({
+    const mcpToolsJson = mcpTools.map((tool: any) => ({
       name: tool.methodName,
       parameters: tool.methodParams,
       description: tool.description,
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 ${projectBackground}
 
 ## 知识库文件
-${knowledgeBaseFiles.length > 0 ? knowledgeBaseFiles.map(file => `- ${file}`).join('\n') : '无'}
+${knowledgeBaseFiles.length > 0 ? knowledgeBaseFiles.map((file: string) => `- ${file}`).join('\n') : '无'}
 
 ## MCP Tools
 ${mcpTools.length > 0 ? '```json\n' + JSON.stringify(mcpToolsJson, null, 2) + '\n```' : '无'}

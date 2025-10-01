@@ -105,7 +105,7 @@ async function getProjectData(projectName: string) {
           const toolsData = JSON.parse(jsonString)
 
           if (Array.isArray(toolsData)) {
-            projectData.mcpTools = toolsData.map(tool => ({
+            projectData.mcpTools = toolsData.map((tool: any) => ({
               methodName: tool.name || tool.methodName || "",
               methodParams: tool.parameters || tool.methodParams || "",
               description: tool.description || "",
@@ -124,7 +124,7 @@ async function getProjectData(projectName: string) {
     if (projectData.knowledgeBaseFiles.length === 0) {
       try {
         const knowledgeFiles = await readdir(knowledgeDir)
-        projectData.knowledgeBaseFiles = knowledgeFiles.map(file => `${projectName}/knowledge/${file}`)
+        projectData.knowledgeBaseFiles = knowledgeFiles.map((file: string) => `${projectName}/knowledge/${file}`)
       } catch (error) {
         console.log("No knowledge directory found for project:", projectName)
       }
