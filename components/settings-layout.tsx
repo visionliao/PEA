@@ -6,6 +6,7 @@ import { ModelSettings } from "@/components/model-settings"
 import { ProjectOverview } from "@/components/project-overview"
 import { PromptFramework } from "@/components/prompt-framework"
 import { RunResults } from "@/components/run-results"
+import { UserManual } from "@/components/user-manual"
 
 export function SettingsLayout() {
   const [activeSection, setActiveSection] = useState("project-overview")
@@ -40,6 +41,7 @@ export function SettingsLayout() {
         {activeSection === "prompt-framework" && <PromptFramework />}
         {activeSection === "model-settings" && <ModelSettings />}
         {activeSection === "run-results" && <RunResults />}
+        {activeSection === "user-manual" && <UserManual />}
         {/* Other sections can be added here */}
       </main>
     </div>
