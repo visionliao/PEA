@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { FolderOpen, FileText, Upload, Plus, Trash2 } from "lucide-react"
+import { FolderOpen, FileText, Upload, Plus, Trash2, Loader2, Save, Edit } from "lucide-react"
 
 // 自动调整textarea高度的组件
 const AutoResizeTextarea = ({
@@ -13,13 +13,15 @@ const AutoResizeTextarea = ({
   onChange,
   placeholder,
   className = "",
-  maxRows = 20
+  maxRows = 20,
+  disabled = false
 }: {
   value: string
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   placeholder: string
   className?: string
   maxRows?: number
+  disabled?: boolean
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -60,7 +62,8 @@ const AutoResizeTextarea = ({
         adjustHeight()
       }}
       placeholder={placeholder}
-      className={`w-full bg-transparent border-0 border-b border-border px-0 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors resize-none min-h-[2rem] max-h-[40rem] ${className}`}
+      disabled={disabled}
+      className={`w-full bg-transparent border-0 border-b border-border px-0 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors resize-none min-h-[2rem] max-h-[40rem] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       rows={1}
     />
   )
@@ -82,6 +85,9 @@ export function ProjectOverview() {
   }>>([])
   const [mcpToolsCode, setMcpToolsCode] = useState("")
   const [parseError, setParseError] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(true)
+  const [showSuccess, setShowSuccess] = useState(false)
 
   useEffect(() => {
     // Fetch the list of .md files from the history_project directory
@@ -100,9 +106,51 @@ export function ProjectOverview() {
     fetchProjectFiles()
   }, [])
 
-  const handleSave = () => {
-    console.log("[v0] Saving project:", { selectedProject, projectName, projectBackground })
-    // TODO: Implement save functionality
+  const handleSave = async () => {
+    if (!projectName.trim()) {
+      alert("请输入项目名称")
+      return
+    }
+
+    setIsLoading(true)
+    setShowSuccess(false)
+
+    try {
+      const response = await fetch("/api/save-project", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          projectName: projectName.trim(),
+          projectBackground: projectBackground.trim(),
+          knowledgeBaseFiles: knowledgeBaseFiles,
+          mcpTools: mcpTools
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "保存失败")
+      }
+
+      // 保存成功，切换到编辑模式
+      setIsEditMode(false)
+      setShowSuccess(true)
+
+      // 3秒后隐藏成功提示
+      setTimeout(() => {
+        setShowSuccess(false)
+      }, 3000)
+
+      console.log("Project saved successfully:", result)
+    } catch (error) {
+      console.error("Error saving project:", error)
+      alert(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleCancel = () => {
@@ -114,6 +162,12 @@ export function ProjectOverview() {
     setMcpTools([])
     setMcpToolsCode("")
     setParseError("")
+    setIsEditMode(true)
+    setShowSuccess(false)
+  }
+
+  const handleEdit = () => {
+    setIsEditMode(true)
   }
 
   const handleKnowledgeBaseFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -349,8 +403,12 @@ export function ProjectOverview() {
               <Label className="text-sm font-medium text-foreground">历史项目</Label>
               <div className="text-xs text-muted-foreground mt-1">{selectedProject}</div>
             </div>
-            <Select value={selectedProject} onValueChange={setSelectedProject}>
-              <SelectTrigger className="w-full md:w-80">
+            <Select
+              value={selectedProject}
+              onValueChange={setSelectedProject}
+              disabled={!isEditMode || isLoading}
+            >
+              <SelectTrigger className="w-full md:w-80 disabled:opacity-50">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -371,6 +429,7 @@ export function ProjectOverview() {
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
             placeholder="请输入项目名称..."
+            disabled={!isEditMode || isLoading}
           />
         </div>
 
@@ -380,6 +439,7 @@ export function ProjectOverview() {
             value={projectBackground}
             onChange={(e) => setProjectBackground(e.target.value)}
             placeholder="请输入项目的描述信息、功能简介等，让大模型能够更好的理解你的项目..."
+            disabled={!isEditMode || isLoading}
           />
         </div>
 
@@ -402,7 +462,8 @@ export function ProjectOverview() {
               <Button
                 variant="outline"
                 onClick={() => document.getElementById('knowledge-base-file-select')?.click()}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 disabled:opacity-50"
+                disabled={!isEditMode || isLoading}
               >
                 <Upload className="h-4 w-4" />
                 选择文件
@@ -415,11 +476,13 @@ export function ProjectOverview() {
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
               isDragging
                 ? 'border-primary bg-primary/5'
+                : !isEditMode || isLoading
+                ? 'border-muted bg-muted/20 cursor-not-allowed'
                 : 'border-border hover:border-primary/50 hover:bg-primary/5'
             }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
+            onDragOver={!isEditMode || isLoading ? undefined : handleDragOver}
+            onDragLeave={!isEditMode || isLoading ? undefined : handleDragLeave}
+            onDrop={!isEditMode || isLoading ? undefined : handleDrop}
           >
             <FolderOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-sm text-muted-foreground mb-2">
@@ -441,7 +504,8 @@ export function ProjectOverview() {
                   variant="ghost"
                   size="sm"
                   onClick={clearKnowledgeBaseFiles}
-                  className="text-xs"
+                  className="text-xs disabled:opacity-50"
+                  disabled={!isEditMode || isLoading}
                 >
                   清除
                 </Button>
@@ -481,14 +545,16 @@ export function ProjectOverview() {
     "returnValue": "temperature: number, condition: string"
   }
 ]`}
-                className="w-full h-[15rem] p-3 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono text-sm"
+                disabled={!isEditMode || isLoading}
+                className="w-full h-[15rem] p-3 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               />
 
               {/* 解析按钮和错误提示 */}
               <div className="flex items-center gap-4">
                 <Button
                   onClick={parseMcpToolsCode}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 disabled:opacity-50"
+                  disabled={!isEditMode || isLoading}
                 >
                   自动解析
                 </Button>
@@ -509,7 +575,8 @@ export function ProjectOverview() {
                     variant="ghost"
                     size="sm"
                     onClick={() => removeMcpTool(tool.id)}
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
+                    disabled={!isEditMode || isLoading}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -522,6 +589,7 @@ export function ProjectOverview() {
                     value={tool.methodName}
                     onChange={(e) => updateMcpTool(tool.id, 'methodName', e.target.value)}
                     placeholder="工具的方法名称，mcp工具函数名都是英文名称..."
+                    disabled={!isEditMode || isLoading}
                   />
                 </div>
 
@@ -531,7 +599,8 @@ export function ProjectOverview() {
                   <AutoResizeTextarea
                     value={tool.methodParams}
                     onChange={(e) => updateMcpTool(tool.id, 'methodParams', e.target.value)}
-                    placeholder="方法支持的参数名称、类型和描述，多个参数用;分隔，例如：get_current_time,string,获取当前时间;get_current_date,string,获取当前日期"
+                    placeholder="方法支持的参数名称、类型和描述，多个参数用;分隔，例如：get_current_time:string:获取当前时间;get_current_date:string:获取当前日期"
+                    disabled={!isEditMode || isLoading}
                   />
                 </div>
 
@@ -542,6 +611,7 @@ export function ProjectOverview() {
                     value={tool.description}
                     onChange={(e) => updateMcpTool(tool.id, 'description', e.target.value)}
                     placeholder="工具功能描述"
+                    disabled={!isEditMode || isLoading}
                   />
                 </div>
 
@@ -552,6 +622,7 @@ export function ProjectOverview() {
                     value={tool.returnValue}
                     onChange={(e) => updateMcpTool(tool.id, 'returnValue', e.target.value)}
                     placeholder="工具返回值"
+                    disabled={!isEditMode || isLoading}
                   />
                 </div>
               </div>
@@ -561,7 +632,8 @@ export function ProjectOverview() {
             <Button
               variant="outline"
               onClick={addMcpTool}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 disabled:opacity-50"
+              disabled={!isEditMode || isLoading}
             >
               <Plus className="h-4 w-4" />
               增加方法
@@ -571,15 +643,44 @@ export function ProjectOverview() {
 
 
         <div className="flex justify-end gap-4 pt-4">
+          {showSuccess && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-md">
+              <Save className="h-4 w-4" />
+              <span className="text-sm">应用成功</span>
+            </div>
+          )}
+
+          {isEditMode && (
+            <Button
+              variant="outline"
+              onClick={handleCancel}
+              className="border-border hover:bg-muted"
+            >
+              取消
+            </Button>
+          )}
+
           <Button
-            variant="outline"
-            onClick={handleCancel}
-            className="border-border hover:bg-muted"
+            onClick={isEditMode ? handleSave : handleEdit}
+            className="bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
+            disabled={isLoading}
           >
-            取消
-          </Button>
-          <Button onClick={handleSave} className="bg-foreground text-background hover:bg-foreground/90">
-            应用
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                保存中...
+              </>
+            ) : isEditMode ? (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                应用
+              </>
+            ) : (
+              <>
+                <Edit className="h-4 w-4 mr-2" />
+                编辑
+              </>
+            )}
           </Button>
         </div>
       </div>
