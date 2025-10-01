@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
@@ -25,6 +25,30 @@ export function PromptFramework() {
     properties: { name: string; description: string }[]
   } | null>(null)
   const [isCreatingCustom, setIsCreatingCustom] = useState(false)
+  // 输入框根据文本内容自动调整高度
+  const editNameRef = useRef<HTMLTextAreaElement>(null)
+  const editDescriptionRef = useRef<HTMLTextAreaElement>(null)
+  const createNameRef = useRef<HTMLTextAreaElement>(null)
+  const createDescriptionRef = useRef<HTMLTextAreaElement>(null)
+  // 输入框根据文本内容自动调整高度监听器
+  useEffect(() => {
+    const resizeTextarea = (ref: React.RefObject<HTMLTextAreaElement>) => {
+      if (ref.current) {
+        ref.current.style.height = "auto"
+        ref.current.style.height = `${ref.current.scrollHeight}px`
+      }
+    }
+
+    if (editingFramework) {
+      if (isCreatingCustom) {
+        resizeTextarea(createNameRef)
+        resizeTextarea(createDescriptionRef)
+      } else {
+        resizeTextarea(editNameRef)
+        resizeTextarea(editDescriptionRef)
+      }
+    }
+  }, [editingFramework, isCreatingCustom]) // Rerun when the editing data changes
 
   // Load frameworks from API
   useEffect(() => {
@@ -219,19 +243,18 @@ export function PromptFramework() {
                     <div className="space-y-2">
                       <Label className="text-sm font-medium text-foreground">框架介绍</Label>
                       <textarea
+                        ref={editDescriptionRef}
                         value={editingFramework.description}
-                        onChange={(e) => {
-                          setEditingFramework({ ...editingFramework, description: e.target.value })
-                          e.target.style.height = "auto"
-                          e.target.style.height = e.target.scrollHeight + "px"
-                        }}
+                        onChange={(e) =>
+                        setEditingFramework({ ...editingFramework, description: e.target.value })
+                        }
                         placeholder="请输入框架的功能简介..."
                         className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
                         rows={1}
                         onInput={(e) => {
-                          const target = e.target as HTMLTextAreaElement
-                          target.style.height = "auto"
-                          target.style.height = target.scrollHeight + "px"
+                        const target = e.target as HTMLTextAreaElement
+                        target.style.height = "auto"
+                        target.style.height = `${target.scrollHeight}px`
                         }}
                       />
                     </div>
@@ -314,19 +337,18 @@ export function PromptFramework() {
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">框架介绍</Label>
               <textarea
+                ref={editDescriptionRef}
                 value={editingFramework.description}
-                onChange={(e) => {
-                  setEditingFramework({ ...editingFramework, description: e.target.value })
-                  e.target.style.height = "auto"
-                  e.target.style.height = e.target.scrollHeight + "px"
-                }}
+                onChange={(e) =>
+                setEditingFramework({ ...editingFramework, description: e.target.value })
+                }
                 placeholder="请输入框架的功能简介..."
                 className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
                 rows={1}
                 onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement
-                  target.style.height = "auto"
-                  target.style.height = target.scrollHeight + "px"
+                const target = e.target as HTMLTextAreaElement
+                target.style.height = "auto"
+                target.style.height = `${target.scrollHeight}px`
                 }}
               />
             </div>
