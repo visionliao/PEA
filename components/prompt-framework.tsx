@@ -11,6 +11,10 @@ interface PromptFramework {
   name: string
   description: string
   properties?: { name: string; description: string }[]
+  examples?: {
+    scenario: string
+    prompt: string
+  }
 }
 
 export function PromptFramework() {
@@ -23,6 +27,10 @@ export function PromptFramework() {
     name: string
     description: string
     properties: { name: string; description: string }[]
+    examples?: {
+      scenario: string
+      prompt: string
+    }
   } | null>(null)
   const [isCreatingCustom, setIsCreatingCustom] = useState(false)
   // 输入框根据文本内容自动调整高度
@@ -102,6 +110,7 @@ export function PromptFramework() {
         name: framework.name,
         description: framework.description,
         properties: framework.properties ? [...framework.properties] : [],
+        examples: framework.examples
       })
     }
   }
@@ -299,6 +308,31 @@ export function PromptFramework() {
                         </div>
                       ))}
                     </div>
+
+                    {/* Example Section */}
+                    {editingFramework.examples && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium text-foreground">应用示例</Label>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-muted-foreground">使用场景</Label>
+                            <div className="px-3 py-2 text-sm bg-muted/30 border border-border rounded-md">
+                              {editingFramework.examples.scenario}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-muted-foreground">示例提示词</Label>
+                            <div className="px-3 py-2 text-sm bg-muted/30 border border-border rounded-md font-mono whitespace-pre-wrap">
+                              {editingFramework.examples.prompt}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex justify-end gap-3 pt-4">
                       <Button onClick={handleSave} className="bg-foreground text-background hover:bg-foreground/90">
