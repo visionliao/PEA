@@ -5,7 +5,9 @@ import { Label } from "@/components/ui/label"
 export function UserManual() {
   return (
     <div className="p-4 md:p-8 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto">
-      <h1 className="text-xl md:text-2xl font-semibold text-foreground mb-6 md:mb-8">使用手册</h1>
+      <div className="mb-6 border-b border-border pb-4 md:mb-8">
+        <h1 className="text-xl font-semibold text-foreground md:text-2xl">使用手册</h1>
+      </div>
 
       <div className="space-y-8">
         {/* Introduction */}
