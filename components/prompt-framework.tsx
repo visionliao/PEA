@@ -452,7 +452,7 @@ export function PromptFramework() {
                     </div>
 
                     {/* Example Section */}
-                    {editingFramework.examples && (
+                    {editingFramework.examples && editingFramework.examples.scenario && editingFramework.examples.prompt && (
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-medium text-foreground">应用示例</Label>

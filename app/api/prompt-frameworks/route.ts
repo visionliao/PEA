@@ -67,6 +67,9 @@ function parseMarkdownFramework(content: string, filename: string): PromptFramew
     if (inCoreSection && line.startsWith('### ')) {
       let propertyName = line.replace('### ', '').trim()
 
+      // Remove numbering pattern like "1. ", "2. ", etc.
+      propertyName = propertyName.replace(/^\d+\.\s*/, '')
+
       // Special handling for LangGPT format - clean up backticks and code formatting
       if (propertyName.includes('`')) {
         propertyName = propertyName.replace(/`([^`]+)`/, '$1')
@@ -111,7 +114,13 @@ function parseMarkdownFramework(content: string, filename: string): PromptFramew
     }
   }
 
-  const examples = scenario && promptLines.length > 0 ? {
+  // Check if examples are meaningful (not just placeholder text)
+  const isMeaningfulScenario = scenario && !scenario.includes('此处为框架应用场景示例')
+  const isMeaningfulPrompt = promptLines.length > 0 && !promptLines.some(line =>
+    line.includes('请根据框架属性在此处添加具体示例内容')
+  )
+
+  const examples = isMeaningfulScenario && isMeaningfulPrompt ? {
     scenario,
     prompt: promptLines.join('\n')
   } : undefined
