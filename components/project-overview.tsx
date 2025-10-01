@@ -105,6 +105,17 @@ export function ProjectOverview() {
     // TODO: Implement save functionality
   }
 
+  const handleCancel = () => {
+    // 清空所有表单数据
+    setSelectedProject("自定义")
+    setProjectName("")
+    setProjectBackground("")
+    setKnowledgeBaseFiles([])
+    setMcpTools([])
+    setMcpToolsCode("")
+    setParseError("")
+  }
+
   const handleKnowledgeBaseFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (!files) return
@@ -559,7 +570,14 @@ export function ProjectOverview() {
         </div>
 
 
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-end gap-4 pt-4">
+          <Button
+            variant="outline"
+            onClick={handleCancel}
+            className="border-border hover:bg-muted"
+          >
+            取消
+          </Button>
           <Button onClick={handleSave} className="bg-foreground text-background hover:bg-foreground/90">
             应用
           </Button>
