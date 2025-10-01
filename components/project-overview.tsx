@@ -5,7 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { FolderOpen, FileText, Upload, Plus, Trash2, Loader2, Save, Edit } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { FolderOpen, FileText, Upload, Plus, Trash2, Loader2, Save, Edit, AlertTriangle } from "lucide-react"
 
 // 自动调整textarea高度的组件
 const AutoResizeTextarea = ({
@@ -88,6 +89,8 @@ export function ProjectOverview() {
   const [isLoading, setIsLoading] = useState(false)
   const [isEditMode, setIsEditMode] = useState(true)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [showProjectExistsDialog, setShowProjectExistsDialog] = useState(false)
+  const [existingProjectName, setExistingProjectName] = useState("")
 
   useEffect(() => {
     // Fetch the list of .md files from the history_project directory
@@ -182,6 +185,12 @@ export function ProjectOverview() {
       const result = await response.json()
 
       if (!response.ok) {
+        if (response.status === 409 && result.exists) {
+          // 项目已存在，显示确认对话框
+          setExistingProjectName(result.projectName)
+          setShowProjectExistsDialog(true)
+          return
+        }
         throw new Error(result.error || "保存失败")
       }
 
@@ -218,6 +227,58 @@ export function ProjectOverview() {
 
   const handleEdit = () => {
     setIsEditMode(true)
+  }
+
+  const handleProjectExistsCancel = () => {
+    setShowProjectExistsDialog(false)
+    setExistingProjectName("")
+  }
+
+  const handleProjectExistsReplace = async () => {
+    if (!existingProjectName) return
+
+    setIsLoading(true)
+    setShowProjectExistsDialog(false)
+
+    try {
+      // 使用强制覆盖参数重新保存项目
+      const response = await fetch("/api/save-project", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          projectName: projectName.trim(),
+          projectBackground: projectBackground.trim(),
+          knowledgeBaseFiles: knowledgeBaseFiles,
+          mcpTools: mcpTools,
+          force: true
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "保存失败")
+      }
+
+      // 保存成功，切换到编辑模式
+      setIsEditMode(false)
+      setShowSuccess(true)
+
+      // 3秒后隐藏成功提示
+      setTimeout(() => {
+        setShowSuccess(false)
+      }, 3000)
+
+      console.log("Project replaced successfully:", result)
+    } catch (error) {
+      console.error("Error replacing project:", error)
+      alert(`替换项目失败: ${error instanceof Error ? error.message : "未知错误"}`)
+    } finally {
+      setIsLoading(false)
+      setExistingProjectName("")
+    }
   }
 
   const handleKnowledgeBaseFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -734,6 +795,36 @@ export function ProjectOverview() {
           </Button>
         </div>
       </div>
+
+      {/* 项目已存在确认对话框 */}
+      <Dialog open={showProjectExistsDialog} onOpenChange={setShowProjectExistsDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              项目已存在
+            </DialogTitle>
+            <DialogDescription>
+              项目 "{existingProjectName}" 已存在。是否要替换现有项目？替换操作将删除现有项目的所有文件。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleProjectExistsCancel}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={handleProjectExistsReplace} disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  替换中...
+                </>
+              ) : (
+                "替换"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
