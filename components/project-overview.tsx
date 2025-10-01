@@ -107,8 +107,58 @@ export function ProjectOverview() {
   }, [])
 
   const handleSave = async () => {
+    const validationErrors = []
+
     if (!projectName.trim()) {
-      alert("请输入项目名称")
+      validationErrors.push("项目名称")
+    }
+
+    if (!projectBackground.trim()) {
+      validationErrors.push("项目背景")
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMessage = `请填写以下必填项目：\n• ${validationErrors.join("\n• ")}`
+
+      // 创建自定义模态框而不是使用alert，使用项目主题色
+      const modal = document.createElement('div')
+      modal.className = 'fixed inset-0 flex items-center justify-center z-50'
+      modal.innerHTML = `
+        <div class="bg-card border border-border rounded-lg p-6 max-w-md mx-4 shadow-lg">
+          <h3 class="text-lg font-semibold mb-4 text-foreground">提示</h3>
+          <p class="text-muted-foreground mb-6 whitespace-pre-line">${errorMessage}</p>
+          <div class="flex justify-end">
+            <button id="modal-ok" class="px-4 py-2 bg-foreground text-background rounded hover:bg-foreground/90 focus:outline-none focus:ring-2 focus:ring-primary transition-colors">
+              确定
+            </button>
+          </div>
+        </div>
+      `
+      document.body.appendChild(modal)
+
+      // 点击确定按钮关闭模态框
+      const okButton = modal.querySelector('#modal-ok') as HTMLElement
+      const closeModal = () => {
+        document.body.removeChild(modal)
+      }
+      okButton.addEventListener('click', closeModal)
+
+      // 点击背景也可以关闭
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal()
+        }
+      })
+
+      // ESC键关闭
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          closeModal()
+          document.removeEventListener('keydown', handleEscape)
+        }
+      }
+      document.addEventListener('keydown', handleEscape)
+
       return
     }
 
