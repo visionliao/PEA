@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { readFile, readdir } from "fs/promises"
+import { readFile, readdir, writeFile, mkdir, access } from "fs/promises"
 import { join } from "path"
 
 interface PromptFramework {
@@ -11,6 +11,12 @@ interface PromptFramework {
     scenario: string
     prompt: string
   }
+}
+
+interface FrameworkData {
+  name: string
+  description: string
+  properties: { name: string; description: string }[]
 }
 
 function parseMarkdownFramework(content: string, filename: string): PromptFramework | null {
@@ -119,6 +125,42 @@ function parseMarkdownFramework(content: string, filename: string): PromptFramew
   }
 }
 
+function generateMarkdownContent(framework: FrameworkData): string {
+  const content = []
+
+  // 框架介绍部分
+  content.push(`# 框架介绍：${framework.name} 提示词法`)
+  content.push("")
+  content.push(`**${framework.name}** ${framework.description}`)
+  content.push("")
+  content.push("---")
+  content.push("")
+
+  // 核心构成部分
+  content.push("## 核心构成")
+  content.push("")
+
+  framework.properties.forEach((property, index) => {
+    content.push(`### ${index + 1}. ${property.name}`)
+    content.push(`> **定义**：${property.description}`)
+    content.push("")
+  })
+
+  content.push("---")
+  content.push("")
+  content.push("## 应用示例")
+  content.push("")
+  content.push("**场景**：此处为框架应用场景示例")
+  content.push("")
+  content.push("按照框架结构，构建提示词：")
+  content.push("")
+  content.push("```yaml")
+  content.push("# 请根据框架属性在此处添加具体示例内容")
+  content.push("```")
+
+  return content.join("\n")
+}
+
 export async function GET() {
   try {
     const promptDir = join(process.cwd(), "template", "prompt")
@@ -152,6 +194,64 @@ export async function GET() {
     console.error("Error loading prompt frameworks:", error)
     return NextResponse.json(
       { error: "Failed to load prompt frameworks" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const framework: FrameworkData = await request.json()
+    const { searchParams } = new URL(request.url)
+    const force = searchParams.get('force') === 'true'
+
+    // Validate framework data
+    if (!framework.name || !framework.description || !framework.properties || framework.properties.length === 0) {
+      return NextResponse.json(
+        { error: "Framework name, description, and at least one property are required" },
+        { status: 400 }
+      )
+    }
+
+    // Create filename
+    const filename = `${framework.name}.md`
+    const filePath = join(process.cwd(), "template", "prompt", filename)
+
+    // Check if file exists
+    try {
+      await access(filePath)
+      if (!force) {
+        return NextResponse.json({ exists: true, success: false })
+      }
+    } catch {
+      // File doesn't exist, continue with saving
+    }
+
+    // Generate markdown content
+    const markdownContent = generateMarkdownContent(framework)
+
+    // Ensure directory exists
+    const dirPath = join(process.cwd(), "template", "prompt")
+    try {
+      await mkdir(dirPath, { recursive: true })
+    } catch {
+      // Directory already exists
+    }
+
+    // Write file
+    await writeFile(filePath, markdownContent, 'utf-8')
+
+    return NextResponse.json({
+      success: true,
+      message: "Framework saved successfully",
+      filename: filename,
+      filePath: filePath
+    })
+
+  } catch (error) {
+    console.error("Error saving framework:", error)
+    return NextResponse.json(
+      { error: "Failed to save framework" },
       { status: 500 }
     )
   }

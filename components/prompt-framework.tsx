@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
-import { Loader2 } from "lucide-react"
+import { Loader2, AlertCircle } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface PromptFramework {
   id: string
@@ -33,11 +34,16 @@ export function PromptFramework() {
     }
   } | null>(null)
   const [isCreatingCustom, setIsCreatingCustom] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
+  const [isSaving, setIsSaving] = useState(false)
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false)
   // 输入框根据文本内容自动调整高度
   const editNameRef = useRef<HTMLTextAreaElement>(null)
   const editDescriptionRef = useRef<HTMLTextAreaElement>(null)
   const createNameRef = useRef<HTMLTextAreaElement>(null)
   const createDescriptionRef = useRef<HTMLTextAreaElement>(null)
+  // 用于属性输入框的refs
+  const propertyRefs = useRef<{[key: string]: HTMLTextAreaElement | null}>({})
   // 输入框根据文本内容自动调整高度监听器
   useEffect(() => {
     const resizeTextarea = (ref: React.RefObject<HTMLTextAreaElement>) => {
@@ -45,6 +51,15 @@ export function PromptFramework() {
         ref.current.style.height = "auto"
         ref.current.style.height = `${ref.current.scrollHeight}px`
       }
+    }
+
+    const resizeAllPropertyInputs = () => {
+      Object.values(propertyRefs.current).forEach(ref => {
+        if (ref) {
+          ref.style.height = "auto"
+          ref.style.height = `${ref.scrollHeight}px`
+        }
+      })
     }
 
     if (editingFramework) {
@@ -55,8 +70,25 @@ export function PromptFramework() {
         resizeTextarea(editNameRef)
         resizeTextarea(editDescriptionRef)
       }
+      resizeAllPropertyInputs()
     }
   }, [editingFramework, isCreatingCustom]) // Rerun when the editing data changes
+
+  // 当属性内容变化时调整高度
+  useEffect(() => {
+    const resizeAllPropertyInputs = () => {
+      Object.values(propertyRefs.current).forEach(ref => {
+        if (ref) {
+          ref.style.height = "auto"
+          ref.style.height = `${ref.scrollHeight}px`
+        }
+      })
+    }
+
+    if (editingFramework) {
+      resizeAllPropertyInputs()
+    }
+  }, [editingFramework?.properties]) // 当属性变化时重新调整高度
 
   // Load frameworks from API
   useEffect(() => {
@@ -142,15 +174,95 @@ export function PromptFramework() {
         ...editingFramework,
         properties: newProperties,
       })
+      // 清理已删除属性的ref
+      delete propertyRefs.current[`${isCreatingCustom ? 'create' : 'edit'}-name-${index}`]
+      delete propertyRefs.current[`${isCreatingCustom ? 'create' : 'edit'}-desc-${index}`]
     }
   }
 
-  const handleSave = () => {
-    console.log("[v0] Saving framework:", editingFramework)
-    alert("保存成功！")
-    setIsCreatingCustom(false)
-    setSelectedFramework(null)
-    setEditingFramework(null)
+  const setPropertyRef = (type: 'name' | 'desc', index: number, element: HTMLTextAreaElement | null) => {
+    const key = `${isCreatingCustom ? 'create' : 'edit'}-${type}-${index}`
+    propertyRefs.current[key] = element
+  }
+
+  const validateFramework = () => {
+    const errors: {[key: string]: string} = {}
+
+    if (!editingFramework?.name.trim()) {
+      errors.name = "框架名称不能为空"
+    }
+
+    if (!editingFramework?.description.trim()) {
+      errors.description = "框架介绍不能为空"
+    }
+
+    if (!editingFramework?.properties || editingFramework.properties.length === 0) {
+      errors.properties = "至少需要一个框架属性"
+    } else {
+      const emptyProperty = editingFramework.properties.findIndex(
+        prop => !prop.name.trim() || !prop.description.trim()
+      )
+      if (emptyProperty !== -1) {
+        errors.properties = `第${emptyProperty + 1}个属性的名称或定义不能为空`
+      }
+    }
+
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSave = async () => {
+    if (!validateFramework()) {
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      // 保存框架（包含存在性检查）
+      const url = showReplaceConfirm ? '/api/prompt-frameworks?force=true' : '/api/prompt-frameworks'
+      const saveResponse = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(editingFramework),
+      })
+
+      const saveData = await saveResponse.json()
+
+      if (saveData.success) {
+        // 动态更新框架列表
+        const newFramework: PromptFramework = {
+          id: editingFramework!.name.toLowerCase().replace(/\s+/g, '-'),
+          name: editingFramework!.name,
+          description: editingFramework!.description,
+          properties: editingFramework!.properties,
+        }
+
+        setFrameworks(prev => [...prev, newFramework])
+
+        alert("保存成功！")
+        setIsCreatingCustom(false)
+        setSelectedFramework(null)
+        setEditingFramework(null)
+        setValidationErrors({})
+        setShowReplaceConfirm(false)
+      } else if (saveData.exists) {
+        if (!showReplaceConfirm) {
+          setShowReplaceConfirm(true)
+          setIsSaving(false)
+          return
+        }
+      } else {
+        alert(saveData.error || "保存失败")
+      }
+    } catch (error) {
+      console.error("Save error:", error)
+      alert("保存失败，请重试")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleCreateCustomFramework = () => {
@@ -167,6 +279,9 @@ export function PromptFramework() {
     setIsCreatingCustom(false)
     setSelectedFramework(null)
     setEditingFramework(null)
+    setValidationErrors({})
+    setShowReplaceConfirm(false)
+    setIsSaving(false)
   }
 
   if (loading) {
@@ -247,6 +362,14 @@ export function PromptFramework() {
                           target.style.height = target.scrollHeight + "px"
                         }}
                       />
+                      {validationErrors.name && (
+                        <Alert className="border-destructive/50">
+                          <AlertCircle className="h-4 w-4 text-destructive" />
+                          <AlertDescription className="text-destructive">
+                            {validationErrors.name}
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -266,6 +389,14 @@ export function PromptFramework() {
                         target.style.height = `${target.scrollHeight}px`
                         }}
                       />
+                      {validationErrors.description && (
+                        <Alert className="border-destructive/50">
+                          <AlertCircle className="h-4 w-4 text-destructive" />
+                          <AlertDescription className="text-destructive">
+                            {validationErrors.description}
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
 
                     <div className="space-y-4">
@@ -283,30 +414,41 @@ export function PromptFramework() {
 
                       {editingFramework.properties.map((property, index) => (
                         <div key={index} className="grid grid-cols-[1fr_2fr_auto] gap-4 items-start">
-                          <input
-                            type="text"
+                          <textarea
+                            ref={(el) => setPropertyRef('name', index, el)}
                             value={property.name}
                             onChange={(e) => handlePropertyChange(index, "name", e.target.value)}
                             placeholder="属性名称"
-                            className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
+                            className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                            rows={1}
                           />
-                          <input
-                            type="text"
+                          <textarea
+                            ref={(el) => setPropertyRef('desc', index, el)}
                             value={property.description}
                             onChange={(e) => handlePropertyChange(index, "description", e.target.value)}
                             placeholder="属性定义"
-                            className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
+                            className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                            rows={1}
                           />
                           <Button
                             onClick={() => handleRemoveProperty(index)}
                             variant="ghost"
                             size="sm"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10 mt-1"
                           >
                             删除
                           </Button>
                         </div>
                       ))}
+
+                      {validationErrors.properties && (
+                        <Alert className="border-destructive/50">
+                          <AlertCircle className="h-4 w-4 text-destructive" />
+                          <AlertDescription className="text-destructive">
+                            {validationErrors.properties}
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
 
                     {/* Example Section */}
@@ -334,9 +476,48 @@ export function PromptFramework() {
                       </div>
                     )}
 
+                    {/* Replacement Confirmation */}
+                    {showReplaceConfirm && (
+                      <Alert className="border-orange-500/50">
+                        <AlertCircle className="h-4 w-4 text-orange-500" />
+                        <AlertDescription className="text-orange-700">
+                          框架文件已存在，是否替换？点击"确认替换"继续，或点击"取消"重新命名。
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                     <div className="flex justify-end gap-3 pt-4">
-                      <Button onClick={handleSave} className="bg-foreground text-background hover:bg-foreground/90">
-                        保存
+                      <Button
+                        onClick={handleCancel}
+                        variant="outline"
+                        className="bg-transparent"
+                      >
+                        取消
+                      </Button>
+                      {showReplaceConfirm && (
+                        <Button
+                          onClick={() => setShowReplaceConfirm(false)}
+                          variant="outline"
+                          className="bg-transparent"
+                        >
+                          取消
+                        </Button>
+                      )}
+                      <Button
+                        onClick={handleSave}
+                        className="bg-foreground text-background hover:bg-foreground/90"
+                        disabled={isSaving}
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            保存中...
+                          </>
+                        ) : showReplaceConfirm ? (
+                          "确认替换"
+                        ) : (
+                          "保存"
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -366,12 +547,20 @@ export function PromptFramework() {
                   target.style.height = target.scrollHeight + "px"
                 }}
               />
+              {validationErrors.name && (
+                <Alert className="border-destructive/50">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                  <AlertDescription className="text-destructive">
+                    {validationErrors.name}
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">框架介绍</Label>
               <textarea
-                ref={editDescriptionRef}
+                ref={createDescriptionRef}
                 value={editingFramework.description}
                 onChange={(e) =>
                 setEditingFramework({ ...editingFramework, description: e.target.value })
@@ -385,6 +574,14 @@ export function PromptFramework() {
                 target.style.height = `${target.scrollHeight}px`
                 }}
               />
+              {validationErrors.description && (
+                <Alert className="border-destructive/50">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                  <AlertDescription className="text-destructive">
+                    {validationErrors.description}
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -397,38 +594,85 @@ export function PromptFramework() {
 
               {editingFramework.properties.map((property, index) => (
                 <div key={index} className="grid grid-cols-[1fr_2fr_auto] gap-4 items-start">
-                  <input
-                    type="text"
+                  <textarea
+                    ref={(el) => setPropertyRef('name', index, el)}
                     value={property.name}
                     onChange={(e) => handlePropertyChange(index, "name", e.target.value)}
                     placeholder="属性名称"
-                    className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
+                    className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                    rows={1}
                   />
-                  <input
-                    type="text"
+                  <textarea
+                    ref={(el) => setPropertyRef('desc', index, el)}
                     value={property.description}
                     onChange={(e) => handlePropertyChange(index, "description", e.target.value)}
                     placeholder="属性定义"
-                    className="px-3 py-2 text-sm bg-background border border-border rounded-md focus:border-foreground focus:outline-none transition-colors"
+                    className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                    rows={1}
                   />
                   <Button
                     onClick={() => handleRemoveProperty(index)}
                     variant="ghost"
                     size="sm"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10 mt-1"
                   >
                     删除
                   </Button>
                 </div>
               ))}
+
+              {validationErrors.properties && (
+                <Alert className="border-destructive/50">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                  <AlertDescription className="text-destructive">
+                    {validationErrors.properties}
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
+            {/* Replacement Confirmation */}
+            {showReplaceConfirm && (
+              <Alert className="border-orange-500/50">
+                <AlertCircle className="h-4 w-4 text-orange-500" />
+                <AlertDescription className="text-orange-700">
+                  框架文件已存在，是否替换？点击"确认替换"继续，或点击"取消"重新命名。
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="flex justify-end gap-3 pt-4">
-              <Button onClick={handleCancel} variant="outline" className="bg-transparent">
+              <Button
+                onClick={handleCancel}
+                variant="outline"
+                className="bg-transparent"
+              >
                 取消
               </Button>
-              <Button onClick={handleSave} className="bg-foreground text-background hover:bg-foreground/90">
-                保存
+              {showReplaceConfirm && (
+                <Button
+                  onClick={() => setShowReplaceConfirm(false)}
+                  variant="outline"
+                  className="bg-transparent"
+                >
+                  取消
+                </Button>
+              )}
+              <Button
+                onClick={handleSave}
+                className="bg-foreground text-background hover:bg-foreground/90"
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    保存中...
+                  </>
+                ) : showReplaceConfirm ? (
+                  "确认替换"
+                ) : (
+                  "保存"
+                )}
               </Button>
             </div>
           </div>
