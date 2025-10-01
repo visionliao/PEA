@@ -93,13 +93,13 @@ export function ProjectOverview() {
   const [existingProjectName, setExistingProjectName] = useState("")
 
   useEffect(() => {
-    // Fetch the list of .md files from the history_project directory
+    // Fetch the list of project folders
     async function fetchProjectFiles() {
       try {
         const response = await fetch("/api/history-projects")
         if (response.ok) {
-          const files = await response.json()
-          setProjectFiles(files)
+          const projects = await response.json()
+          setProjectFiles(projects)
         }
       } catch (error) {
         console.error("Failed to fetch project files:", error)
@@ -108,6 +108,58 @@ export function ProjectOverview() {
 
     fetchProjectFiles()
   }, [])
+
+  // 处理项目选择变化
+  const handleProjectChange = async (projectName: string) => {
+    setSelectedProject(projectName)
+
+    if (projectName === "自定义") {
+      // 清空表单，让用户自定义
+      setProjectName("")
+      setProjectBackground("")
+      setKnowledgeBaseFiles([])
+      setMcpTools([])
+      setMcpToolsCode("")
+      setIsEditMode(true)
+      return
+    }
+
+    // 加载选中项目的数据
+    setIsLoading(true)
+    try {
+      const response = await fetch(`/api/history-projects?projectName=${encodeURIComponent(projectName)}`)
+      if (response.ok) {
+        const projectData = await response.json()
+
+        // 填充表单数据
+        setProjectName(projectData.projectName || projectName)
+        setProjectBackground(projectData.projectBackground || "")
+        setKnowledgeBaseFiles(projectData.knowledgeBaseFiles || [])
+
+        // 处理 MCP Tools
+        if (projectData.mcpTools && projectData.mcpTools.length > 0) {
+          const toolsWithIds = projectData.mcpTools.map((tool, index) => ({
+            id: `loaded-${Date.now()}-${index}`,
+            methodName: tool.methodName || "",
+            methodParams: tool.methodParams || "",
+            description: tool.description || "",
+            returnValue: tool.returnValue || ""
+          }))
+          setMcpTools(toolsWithIds)
+        } else {
+          setMcpTools([])
+        }
+
+        setIsEditMode(false) // 选择已存在的项目时，默认为查看模式
+      } else {
+        console.error("Failed to load project data")
+      }
+    } catch (error) {
+      console.error("Error loading project data:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleSave = async () => {
     const validationErrors = []
@@ -198,6 +250,19 @@ export function ProjectOverview() {
       setIsEditMode(false)
       setShowSuccess(true)
 
+      // 刷新项目列表
+      try {
+        const response = await fetch("/api/history-projects")
+        if (response.ok) {
+          const projects = await response.json()
+          setProjectFiles(projects)
+          // 选中新创建的项目
+          setSelectedProject(projectName.trim())
+        }
+      } catch (error) {
+        console.error("Failed to refresh project list:", error)
+      }
+
       // 3秒后隐藏成功提示
       setTimeout(() => {
         setShowSuccess(false)
@@ -265,6 +330,19 @@ export function ProjectOverview() {
       // 保存成功，切换到编辑模式
       setIsEditMode(false)
       setShowSuccess(true)
+
+      // 刷新项目列表
+      try {
+        const response = await fetch("/api/history-projects")
+        if (response.ok) {
+          const projects = await response.json()
+          setProjectFiles(projects)
+          // 选中新创建的项目
+          setSelectedProject(projectName.trim())
+        }
+      } catch (error) {
+        console.error("Failed to refresh project list:", error)
+      }
 
       // 3秒后隐藏成功提示
       setTimeout(() => {
@@ -516,17 +594,17 @@ export function ProjectOverview() {
             </div>
             <Select
               value={selectedProject}
-              onValueChange={setSelectedProject}
-              disabled={!isEditMode || isLoading}
+              onValueChange={handleProjectChange}
+              disabled={isLoading}
             >
               <SelectTrigger className="w-full md:w-80 disabled:opacity-50">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="自定义">自定义</SelectItem>
-                {projectFiles.map((file) => (
-                  <SelectItem key={file} value={file}>
-                    {file.replace(".md", "")}
+                {projectFiles.map((projectName) => (
+                  <SelectItem key={projectName} value={projectName}>
+                    {projectName}
                   </SelectItem>
                 ))}
               </SelectContent>
