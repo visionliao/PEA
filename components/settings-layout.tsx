@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { ModelSettings } from "@/components/model-settings"
 import { ProjectOverview } from "@/components/project-overview"
+import { PromptFramework } from "@/components/prompt-framework"
 
 export function SettingsLayout() {
   const [activeSection, setActiveSection] = useState("project-overview")
@@ -35,6 +36,7 @@ export function SettingsLayout() {
       />
       <main className="flex-1 min-w-0 overflow-auto">
         {activeSection === "project-overview" && <ProjectOverview />}
+        {activeSection === "prompt-framework" && <PromptFramework />}
         {activeSection === "model-settings" && <ModelSettings />}
         {/* Other sections can be added here */}
       </main>
