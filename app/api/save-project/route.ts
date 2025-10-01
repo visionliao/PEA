@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     }
 
     // 创建项目输出目录
-    const projectDir = join(process.cwd(), "output", "project")
+    const projectDir = join(process.cwd(), "output", "project", projectName)
     const knowledgeDir = join(projectDir, "knowledge")
     
     await mkdir(projectDir, { recursive: true })
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         await copyFile(sourcePath, destPath)
         copiedFiles.push({
           original: filePath,
-          copied: `knowledge/${filePath.split('/').pop() || filePath}`
+          copied: `${projectName}/knowledge/${filePath.split('/').pop() || filePath}`
         })
       } catch (error) {
         console.error(`Error copying file ${filePath}:`, error)
@@ -61,13 +61,13 @@ ${new Date().toLocaleString('zh-CN')}
 `
 
     // 写入项目文件
-    const projectFilePath = join(projectDir, `${projectName}.md`)
+    const projectFilePath = join(projectDir, "project.md")
     await writeFile(projectFilePath, projectContent, 'utf-8')
 
     return NextResponse.json({
       success: true,
       message: "项目保存成功",
-      projectFile: `${projectName}.md`,
+      projectFile: `${projectName}/project.md`,
       copiedFiles: copiedFiles,
       mcpToolsCount: mcpTools.length
     })
