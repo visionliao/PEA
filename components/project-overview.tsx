@@ -309,7 +309,7 @@ export function ProjectOverview() {
         throw new Error("未解析到任何工具信息")
       }
 
-      // 生成工具列表
+      // 生成工具列表，追加到现有列表中
       const newTools = parsedTools.map((tool, index) => ({
         id: `parsed-${Date.now()}-${index}`,
         methodName: tool.methodName,
@@ -318,7 +318,8 @@ export function ProjectOverview() {
         returnValue: tool.returnValue
       }))
 
-      setMcpTools(newTools)
+      // 追加到现有工具列表
+      setMcpTools([...mcpTools, ...newTools])
     } catch (error) {
       setParseError(`解析失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
