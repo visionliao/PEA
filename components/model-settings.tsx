@@ -2,15 +2,32 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 
+interface ModelConfig {
+  name: string
+  provider: string
+  color: string
+}
+
+interface ProviderConfig {
+  apiKey: string
+  modelList: string[]
+  displayName: string
+  color: string
+}
+
 export function ModelSettings() {
-  const [model, setModel] = useState("gemini-2.5-flash")
+  const [models, setModels] = useState<ModelConfig[]>([])
+  const [providers, setProviders] = useState<{[key: string]: ProviderConfig}>({})
+  const [promptModel, setPromptModel] = useState("")
+  const [workModel, setWorkModel] = useState("")
+  const [scoreModel, setScoreModel] = useState("")
   const [streamingEnabled, setStreamingEnabled] = useState(true)
   const [temperature, setTemperature] = useState([1.0])
   const [topP, setTopP] = useState([1.0])
@@ -21,6 +38,61 @@ export function ModelSettings() {
   const [maxTokens, setMaxTokens] = useState([0])
   const [maxTokensInput, setMaxTokensInput] = useState("0") // Added separate state for input field
   const [reasoningEffort, setReasoningEffort] = useState("中")
+
+  // 动态获取模型配置
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const response = await fetch('/api/models')
+        if (!response.ok) {
+          throw new Error('Failed to load model configurations')
+        }
+
+        const data = await response.json()
+        const { providers, models: allModels, defaultModels } = data
+
+        const providerConfigs: {[key: string]: ProviderConfig} = {}
+
+        // 转换API返回的数据格式
+        Object.entries(providers).forEach(([provider, config]: [string, any]) => {
+          providerConfigs[provider] = {
+            apiKey: config.apiKey,
+            modelList: config.modelList,
+            displayName: config.displayName,
+            color: config.color
+          }
+        })
+
+        setProviders(providerConfigs)
+        setModels(allModels)
+
+        // 检查默认模型是否在模型列表中
+        const isValidModel = (modelName: string) => allModels.some((model: ModelConfig) => model.name === modelName)
+
+        setPromptModel(isValidModel(defaultModels.promptModel) ? defaultModels.promptModel : allModels[0]?.name || '')
+        setWorkModel(isValidModel(defaultModels.workModel) ? defaultModels.workModel : allModels[0]?.name || '')
+        setScoreModel(isValidModel(defaultModels.scoreModel) ? defaultModels.scoreModel : allModels[0]?.name || '')
+      } catch (error) {
+        console.error('Error loading model configurations:', error)
+      }
+    }
+
+    loadModels()
+  }, [])
+
+  // 获取模型提供商显示名称
+  const getModelProvider = (modelName: string) => {
+    const model = models.find(m => m.name === modelName)
+    if (!model) return ''
+    return providers[model.provider]?.displayName || ''
+  }
+
+  // 获取模型颜色
+  const getModelColor = (modelName: string) => {
+    const model = models.find(m => m.name === modelName)
+    if (!model) return 'gray'
+    return model.color
+  }
 
   const handleMaxTokensSliderChange = (value: number[]) => {
     setMaxTokens(value)
@@ -55,44 +127,104 @@ export function ModelSettings() {
       </div>
 
       <div className="space-y-6 md:space-y-8">
+        {/* 提示词生成模型 */}
         <div className="space-y-2">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium text-foreground">模型</Label>
-                <span className="text-xs text-muted-foreground">model</span>
+                <Label className="text-sm font-medium text-foreground">提示词模型</Label>
               </div>
-              <div className="text-xs text-muted-foreground mt-1">Google 模型</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {promptModel ? getModelProvider(promptModel) : '无可用模型'}
+              </div>
             </div>
-            <Select value={model} onValueChange={setModel}>
+            <Select value={promptModel} onValueChange={setPromptModel}>
               <SelectTrigger className="w-full md:w-80">
-                <SelectValue />
+                <SelectValue placeholder="选择模型" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="gemini-2.5-flash">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    Gemini 2.5 Flash
-                  </div>
-                </SelectItem>
-                <SelectItem value="gemini-pro">Gemini Pro</SelectItem>
-                <SelectItem value="gemini-ultra">Gemini Ultra</SelectItem>
+                {models.map((model) => (
+                  <SelectItem key={model.name} value={model.name}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 bg-${model.color}-500 rounded-full`}></div>
+                      {model.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* 工作模型 */}
+        <div className="space-y-2">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium text-foreground">工作模型</Label>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {workModel ? getModelProvider(workModel) : '无可用模型'}
+              </div>
+            </div>
+            <Select value={workModel} onValueChange={setWorkModel}>
+              <SelectTrigger className="w-full md:w-80">
+                <SelectValue placeholder="选择模型" />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((model) => (
+                  <SelectItem key={model.name} value={model.name}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 bg-${model.color}-500 rounded-full`}></div>
+                      {model.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* 评分模型 */}
+        <div className="space-y-2">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium text-foreground">评分模型</Label>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {scoreModel ? getModelProvider(scoreModel) : '无可用模型'}
+              </div>
+            </div>
+            <Select value={scoreModel} onValueChange={setScoreModel}>
+              <SelectTrigger className="w-full md:w-80">
+                <SelectValue placeholder="选择模型" />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((model) => (
+                  <SelectItem key={model.name} value={model.name}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 bg-${model.color}-500 rounded-full`}></div>
+                      {model.name}
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
 
         {/* Streaming Output */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        {/* <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="space-y-1">
             <Label className="text-sm font-medium text-foreground">启用流式输出</Label>
             <p className="text-xs text-muted-foreground">启用流式输出时实时显示响应，禁用后仅显示完整响应。</p>
           </div>
           <Switch checked={streamingEnabled} onCheckedChange={setStreamingEnabled} />
-        </div>
+        </div> */}
 
         {/* Temperature */}
-        <div className="space-y-4">
+        {/* <div className="space-y-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Label className="text-sm font-medium text-foreground">创意活跃度</Label>
@@ -104,10 +236,10 @@ export function ModelSettings() {
             <Slider value={temperature} onValueChange={setTemperature} max={2} min={0} step={0.1} className="flex-1" />
             <span className="text-sm font-medium text-foreground w-12 text-right">{temperature[0].toFixed(1)}</span>
           </div>
-        </div>
+        </div> */}
 
         {/* Top P */}
-        <div className="space-y-4">
+        {/* <div className="space-y-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Label className="text-sm font-medium text-foreground">思维开放度</Label>
@@ -121,10 +253,10 @@ export function ModelSettings() {
             <Slider value={topP} onValueChange={setTopP} max={1} min={0} step={0.1} className="flex-1" />
             <span className="text-sm font-medium text-foreground w-12 text-right">{topP[0].toFixed(1)}</span>
           </div>
-        </div>
+        </div> */}
 
         {/* Presence Penalty */}
-        <div className="space-y-4">
+        {/* <div className="space-y-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Label className="text-sm font-medium text-foreground">表达发散度</Label>
@@ -145,10 +277,10 @@ export function ModelSettings() {
             />
             <span className="text-sm font-medium text-foreground w-12 text-right">{presencePenalty[0].toFixed(1)}</span>
           </div>
-        </div>
+        </div> */}
 
         {/* Frequency Penalty */}
-        <div className="space-y-4">
+        {/* <div className="space-y-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Label className="text-sm font-medium text-foreground">词汇丰富度</Label>
@@ -169,9 +301,9 @@ export function ModelSettings() {
               {frequencyPenalty[0].toFixed(1)}
             </span>
           </div>
-        </div>
+        </div> */}
 
-        <div className="space-y-6 pt-4">
+        {/* <div className="space-y-6 pt-4">
           <div className="space-y-4">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <Label className="text-sm font-medium text-foreground">开启单次回复限制</Label>
@@ -201,14 +333,12 @@ export function ModelSettings() {
                         onChange={handleMaxTokensInputChange}
                         className="w-20 h-8 text-center text-sm pr-5" // 调整了 padding-right 以适应自定义箭头
                       />
-                      {/* 自定义箭头，使用 group-hover 控制悬停时显示 */}
                       <div className="absolute right-0 top-0 h-full flex flex-col justify-center items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <button
                           onClick={incrementTokens}
                           className="h-1/2 px-1 text-muted-foreground hover:text-foreground flex items-center"
                           aria-label="增加"
                         >
-                          {/* 这是一个简单的上箭头 SVG，你可以替换成你项目中的图标库图标 */}
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
                         </button>
                         <button
@@ -216,7 +346,6 @@ export function ModelSettings() {
                           className="h-1/2 px-1 text-muted-foreground hover:text-foreground flex items-center"
                           aria-label="减少"
                         >
-                          {/* 这是一个简单的下箭头 SVG */}
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                         </button>
                       </div>
@@ -260,7 +389,7 @@ export function ModelSettings() {
               </div>
             )}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   )
