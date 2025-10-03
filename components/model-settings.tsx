@@ -2,70 +2,33 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { ModelParams } from "@/components/model-params"
-
-interface ModelConfig {
-  name: string
-  provider: string
-  color: string
-}
-
-interface ProviderConfig {
-  apiKey: string
-  modelList: string[]
-  displayName: string
-  color: string
-}
+import { useAppStore } from "@/store/app-store"
 
 export function ModelSettings() {
-  const [models, setModels] = useState<ModelConfig[]>([])
-  const [providers, setProviders] = useState<{[key: string]: ProviderConfig}>({})
-  const [promptModel, setPromptModel] = useState("")
-  const [workModel, setWorkModel] = useState("")
-  const [scoreModel, setScoreModel] = useState("")
-
-  // 三个模型的参数配置
-  const [promptModelParams, setPromptModelParams] = useState({
-    streamingEnabled: true,
-    temperature: [1.0],
-    topP: [1.0],
-    presencePenalty: [0.0],
-    frequencyPenalty: [0.0],
-    singleResponseLimit: false,
-    maxTokens: [0],
-    maxTokensInput: "0",
-    intelligentAdjustment: false,
-    reasoningEffort: "中"
-  })
-
-  const [workModelParams, setWorkModelParams] = useState({
-    streamingEnabled: true,
-    temperature: [1.0],
-    topP: [1.0],
-    presencePenalty: [0.0],
-    frequencyPenalty: [0.0],
-    singleResponseLimit: false,
-    maxTokens: [0],
-    maxTokensInput: "0",
-    intelligentAdjustment: false,
-    reasoningEffort: "中"
-  })
-
-  const [scoreModelParams, setScoreModelParams] = useState({
-    streamingEnabled: true,
-    temperature: [1.0],
-    topP: [1.0],
-    presencePenalty: [0.0],
-    frequencyPenalty: [0.0],
-    singleResponseLimit: false,
-    maxTokens: [0],
-    maxTokensInput: "0",
-    intelligentAdjustment: false,
-    reasoningEffort: "中"
-  })
+  const {
+    modelSettingsConfig: {
+      models,
+      providers,
+      promptModel,
+      workModel,
+      scoreModel,
+      promptModelParams,
+      workModelParams,
+      scoreModelParams
+    },
+    setModels,
+    setProviders,
+    setPromptModel,
+    setWorkModel,
+    setScoreModel,
+    setPromptModelParams,
+    setWorkModelParams,
+    setScoreModelParams
+  } = useAppStore()
 
   // 动态获取模型配置
   useEffect(() => {
@@ -79,7 +42,7 @@ export function ModelSettings() {
         const data = await response.json()
         const { providers, models: allModels, defaultModels } = data
 
-        const providerConfigs: {[key: string]: ProviderConfig} = {}
+        const providerConfigs: {[key: string]: any} = {}
 
         // 转换API返回的数据格式
         Object.entries(providers).forEach(([provider, config]: [string, any]) => {
@@ -95,29 +58,39 @@ export function ModelSettings() {
         setModels(allModels)
 
         // 检查默认模型是否在模型列表中
-        const isValidModel = (modelName: string) => allModels.some((model: ModelConfig) => model.name === modelName)
+        const isValidModel = (modelName: string) => allModels.some((model: any) => model.name === modelName)
 
-        setPromptModel(isValidModel(defaultModels.promptModel) ? defaultModels.promptModel : allModels[0]?.name || '')
-        setWorkModel(isValidModel(defaultModels.workModel) ? defaultModels.workModel : allModels[0]?.name || '')
-        setScoreModel(isValidModel(defaultModels.scoreModel) ? defaultModels.scoreModel : allModels[0]?.name || '')
+        // 只在当前没有设置模型时才设置默认值
+        if (!promptModel) {
+          setPromptModel(isValidModel(defaultModels.promptModel) ? defaultModels.promptModel : allModels[0]?.name || '')
+        }
+        if (!workModel) {
+          setWorkModel(isValidModel(defaultModels.workModel) ? defaultModels.workModel : allModels[0]?.name || '')
+        }
+        if (!scoreModel) {
+          setScoreModel(isValidModel(defaultModels.scoreModel) ? defaultModels.scoreModel : allModels[0]?.name || '')
+        }
       } catch (error) {
         console.error('Error loading model configurations:', error)
       }
     }
 
-    loadModels()
-  }, [])
+    // 只有在模型列表为空时才加载
+    if (!models || models.length === 0) {
+      loadModels()
+    }
+  }, [(models || []).length, promptModel, workModel, scoreModel, setProviders, setModels, setPromptModel, setWorkModel, setScoreModel])
 
   // 获取模型提供商显示名称
   const getModelProvider = (modelName: string) => {
-    const model = models.find(m => m.name === modelName)
+    const model = (models || []).find(m => m.name === modelName)
     if (!model) return ''
     return providers[model.provider]?.displayName || ''
   }
 
   // 获取模型颜色
   const getModelColor = (modelName: string) => {
-    const model = models.find(m => m.name === modelName)
+    const model = (models || []).find(m => m.name === modelName)
     if (!model) return 'gray'
     return model.color
   }
@@ -146,10 +119,10 @@ export function ModelSettings() {
                   <SelectValue placeholder="选择模型" />
                 </SelectTrigger>
                 <SelectContent>
-                  {models.map((model) => (
+                  {(models || []).map((model) => (
                     <SelectItem key={model.name} value={model.name}>
                       <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 bg-${model.color}-500 rounded-full`}></div>
+                        <div className={`w-2 h-2 rounded-full ${model.color === 'gray' ? 'bg-gray-500' : model.color === 'blue' ? 'bg-blue-500' : model.color === 'green' ? 'bg-green-500' : model.color === 'red' ? 'bg-red-500' : model.color === 'yellow' ? 'bg-yellow-500' : 'bg-purple-500'}`}></div>
                         {model.name}
                       </div>
                     </SelectItem>
@@ -185,10 +158,10 @@ export function ModelSettings() {
                   <SelectValue placeholder="选择模型" />
                 </SelectTrigger>
                 <SelectContent>
-                  {models.map((model) => (
+                  {(models || []).map((model) => (
                     <SelectItem key={model.name} value={model.name}>
                       <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 bg-${model.color}-500 rounded-full`}></div>
+                        <div className={`w-2 h-2 rounded-full ${model.color === 'gray' ? 'bg-gray-500' : model.color === 'blue' ? 'bg-blue-500' : model.color === 'green' ? 'bg-green-500' : model.color === 'red' ? 'bg-red-500' : model.color === 'yellow' ? 'bg-yellow-500' : 'bg-purple-500'}`}></div>
                         {model.name}
                       </div>
                     </SelectItem>
@@ -224,10 +197,10 @@ export function ModelSettings() {
                   <SelectValue placeholder="选择模型" />
                 </SelectTrigger>
                 <SelectContent>
-                  {models.map((model) => (
+                  {(models || []).map((model) => (
                     <SelectItem key={model.name} value={model.name}>
                       <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 bg-${model.color}-500 rounded-full`}></div>
+                        <div className={`w-2 h-2 rounded-full ${model.color === 'gray' ? 'bg-gray-500' : model.color === 'blue' ? 'bg-blue-500' : model.color === 'green' ? 'bg-green-500' : model.color === 'red' ? 'bg-red-500' : model.color === 'yellow' ? 'bg-yellow-500' : 'bg-purple-500'}`}></div>
                         {model.name}
                       </div>
                     </SelectItem>

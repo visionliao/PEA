@@ -1,17 +1,23 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { ModelSettings } from "@/components/model-settings"
 import { ProjectOverview } from "@/components/project-overview"
 import { PromptFramework } from "@/components/prompt-framework"
 import { RunResults } from "@/components/run-results"
 import { UserManual } from "@/components/user-manual"
+import { useAppStore } from "@/store/app-store"
 
 export function SettingsLayout() {
-  const [activeSection, setActiveSection] = useState("project-overview")
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
+  const {
+    activeSection,
+    sidebarCollapsed,
+    isMobile,
+    setActiveSection,
+    setSidebarCollapsed,
+    setIsMobile
+  } = useAppStore()
 
   useEffect(() => {
     const checkMobile = () => {
@@ -25,7 +31,7 @@ export function SettingsLayout() {
     checkMobile()
     window.addEventListener("resize", checkMobile)
     return () => window.removeEventListener("resize", checkMobile)
-  }, [])
+  }, [setIsMobile, setSidebarCollapsed])
 
   return (
     <div className="flex h-screen bg-background">

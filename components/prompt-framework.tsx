@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
+import { useAppStore } from "@/store/app-store"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
@@ -19,24 +20,30 @@ interface PromptFramework {
 }
 
 export function PromptFramework() {
-  const [frameworks, setFrameworks] = useState<PromptFramework[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selectedFrameworks, setSelectedFrameworks] = useState<Set<string>>(new Set())
-  const [selectAll, setSelectAll] = useState(false)
-  const [selectedFramework, setSelectedFramework] = useState<string | null>(null)
-  const [editingFramework, setEditingFramework] = useState<{
-    name: string
-    description: string
-    properties: { name: string; description: string }[]
-    examples?: {
-      scenario: string
-      prompt: string
-    }
-  } | null>(null)
-  const [isCreatingCustom, setIsCreatingCustom] = useState(false)
-  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
-  const [isSaving, setIsSaving] = useState(false)
-  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false)
+  const {
+    promptFrameworkConfig: {
+      frameworks,
+      loading,
+      selectedFrameworks,
+      selectAll,
+      selectedFramework,
+      editingFramework,
+      isCreatingCustom,
+      validationErrors,
+      isSaving,
+      showReplaceConfirm
+    },
+    setFrameworks,
+    setPromptFrameworkLoading,
+    setSelectedFrameworks,
+    setSelectAll,
+    setSelectedFramework,
+    setEditingFramework,
+    setIsCreatingCustom,
+    setValidationErrors,
+    setIsSaving,
+    setShowReplaceConfirm
+  } = useAppStore()
   // 输入框根据文本内容自动调整高度
   const editNameRef = useRef<HTMLTextAreaElement>(null)
   const editDescriptionRef = useRef<HTMLTextAreaElement>(null)
@@ -102,7 +109,7 @@ export function PromptFramework() {
       } catch (error) {
         console.error("Failed to load frameworks:", error)
       } finally {
-        setLoading(false)
+        setPromptFrameworkLoading(false)
       }
     }
 
@@ -120,14 +127,15 @@ export function PromptFramework() {
 
   const handleFrameworkToggle = (id: string, checked: boolean, e: React.MouseEvent) => {
     e.stopPropagation()
-    const newSelected = new Set(selectedFrameworks)
+    const currentSelected = selectedFrameworks instanceof Set ? selectedFrameworks : new Set<string>()
+    const newSelected = new Set<string>(currentSelected)
     if (checked) {
       newSelected.add(id)
     } else {
       newSelected.delete(id)
     }
     setSelectedFrameworks(newSelected)
-    setSelectAll(newSelected.size === frameworks.length)
+    setSelectAll(newSelected.size === (frameworks || []).length)
   }
 
   const handleRowClick = (framework: PromptFramework) => {
@@ -169,7 +177,7 @@ export function PromptFramework() {
 
   const handleRemoveProperty = (index: number) => {
     if (editingFramework) {
-      const newProperties = editingFramework.properties.filter((_, i) => i !== index)
+      const newProperties = (editingFramework.properties || []).filter((_, i) => i !== index)
       setEditingFramework({
         ...editingFramework,
         properties: newProperties,
@@ -199,7 +207,7 @@ export function PromptFramework() {
     if (!editingFramework?.properties || editingFramework.properties.length === 0) {
       errors.properties = "至少需要一个框架属性"
     } else {
-      const emptyProperty = editingFramework.properties.findIndex(
+      const emptyProperty = (editingFramework.properties || []).findIndex(
         prop => !prop.name.trim() || !prop.description.trim()
       )
       if (emptyProperty !== -1) {
@@ -323,7 +331,7 @@ export function PromptFramework() {
           <Label className="text-sm font-medium text-foreground">框架简介</Label>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground min-w-[20px] text-right">
-              {selectedFrameworks.size}
+              {selectedFrameworks instanceof Set ? selectedFrameworks.size : 0}
             </span>
             <Checkbox id="select-all" checked={selectAll} onCheckedChange={handleSelectAll} />
             <Label htmlFor="select-all" className="text-sm font-medium text-foreground cursor-pointer">
@@ -333,7 +341,7 @@ export function PromptFramework() {
         </div>
 
         <div className="space-y-4">
-          {frameworks.length === 0 ? (
+          {(frameworks || []).length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               暂无提示词框架
             </div>
@@ -351,7 +359,7 @@ export function PromptFramework() {
                   <div className="flex items-center justify-center pt-1">
                     <Checkbox
                       id={framework.id}
-                      checked={selectedFrameworks.has(framework.id)}
+                      checked={selectedFrameworks instanceof Set ? selectedFrameworks.has(framework.id) : false}
                       onCheckedChange={(checked) => handleFrameworkToggle(framework.id, checked as boolean, event as any)}
                       onClick={(e) => e.stopPropagation()}
                     />
@@ -378,11 +386,11 @@ export function PromptFramework() {
                           target.style.height = target.scrollHeight + "px"
                         }}
                       />
-                      {validationErrors.name && (
+                      {(validationErrors || {}).name && (
                         <Alert className="border-destructive/50">
                           <AlertCircle className="h-4 w-4 text-destructive" />
                           <AlertDescription className="text-destructive">
-                            {validationErrors.name}
+                            {(validationErrors || {}).name}
                           </AlertDescription>
                         </Alert>
                       )}
@@ -405,11 +413,11 @@ export function PromptFramework() {
                         target.style.height = `${target.scrollHeight}px`
                         }}
                       />
-                      {validationErrors.description && (
+                      {(validationErrors || {}).description && (
                         <Alert className="border-destructive/50">
                           <AlertCircle className="h-4 w-4 text-destructive" />
                           <AlertDescription className="text-destructive">
-                            {validationErrors.description}
+                            {(validationErrors || {}).description}
                           </AlertDescription>
                         </Alert>
                       )}
@@ -428,7 +436,7 @@ export function PromptFramework() {
                         </Button>
                       </div>
 
-                      {editingFramework.properties.map((property, index) => (
+                      {(editingFramework.properties || []).map((property, index) => (
                         <div key={index} className="grid grid-cols-[1fr_2fr_auto] gap-4 items-start">
                           <textarea
                             ref={(el) => setPropertyRef('name', index, el)}
@@ -457,11 +465,11 @@ export function PromptFramework() {
                         </div>
                       ))}
 
-                      {validationErrors.properties && (
+                      {(validationErrors || {}).properties && (
                         <Alert className="border-destructive/50">
                           <AlertCircle className="h-4 w-4 text-destructive" />
                           <AlertDescription className="text-destructive">
-                            {validationErrors.properties}
+                            {(validationErrors || {}).properties}
                           </AlertDescription>
                         </Alert>
                       )}
@@ -554,11 +562,11 @@ export function PromptFramework() {
                   target.style.height = target.scrollHeight + "px"
                 }}
               />
-              {validationErrors.name && (
+              {(validationErrors || {}).name && (
                 <Alert className="border-destructive/50">
                   <AlertCircle className="h-4 w-4 text-destructive" />
                   <AlertDescription className="text-destructive">
-                    {validationErrors.name}
+                    {(validationErrors || {}).name}
                   </AlertDescription>
                 </Alert>
               )}
@@ -581,11 +589,11 @@ export function PromptFramework() {
                 target.style.height = `${target.scrollHeight}px`
                 }}
               />
-              {validationErrors.description && (
+              {(validationErrors || {}).description && (
                 <Alert className="border-destructive/50">
                   <AlertCircle className="h-4 w-4 text-destructive" />
                   <AlertDescription className="text-destructive">
-                    {validationErrors.description}
+                    {(validationErrors || {}).description}
                   </AlertDescription>
                 </Alert>
               )}
@@ -599,7 +607,7 @@ export function PromptFramework() {
                 </Button>
               </div>
 
-              {editingFramework.properties.map((property, index) => (
+              {(editingFramework.properties || []).map((property, index) => (
                 <div key={index} className="grid grid-cols-[1fr_2fr_auto] gap-4 items-start">
                   <textarea
                     ref={(el) => setPropertyRef('name', index, el)}
@@ -628,11 +636,11 @@ export function PromptFramework() {
                 </div>
               ))}
 
-              {validationErrors.properties && (
+              {(validationErrors || {}).properties && (
                 <Alert className="border-destructive/50">
                   <AlertCircle className="h-4 w-4 text-destructive" />
                   <AlertDescription className="text-destructive">
-                    {validationErrors.properties}
+                    {(validationErrors || {}).properties}
                   </AlertDescription>
                 </Alert>
               )}

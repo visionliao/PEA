@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useEffect, useRef, useCallback } from "react"
+import { useAppStore } from "@/store/app-store"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -71,26 +72,38 @@ const AutoResizeTextarea = ({
 }
 
 export function ProjectOverview() {
-  const [selectedProject, setSelectedProject] = useState("自定义")
-  const [projectFiles, setProjectFiles] = useState<string[]>([])
-  const [projectName, setProjectName] = useState("")
-  const [projectBackground, setProjectBackground] = useState("")
-  const [knowledgeBaseFiles, setKnowledgeBaseFiles] = useState<string[]>([])
-  const [isDragging, setIsDragging] = useState(false)
-  const [mcpTools, setMcpTools] = useState<Array<{
-    id: string
-    methodName: string
-    methodParams: string
-    description: string
-    returnValue: string
-  }>>([])
-  const [mcpToolsCode, setMcpToolsCode] = useState("")
-  const [parseError, setParseError] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [isEditMode, setIsEditMode] = useState(true)
-  const [showSuccess, setShowSuccess] = useState(false)
-  const [showProjectExistsDialog, setShowProjectExistsDialog] = useState(false)
-  const [existingProjectName, setExistingProjectName] = useState("")
+  const {
+    projectConfig: {
+      selectedProject,
+      projectFiles,
+      projectName,
+      projectBackground,
+      knowledgeBaseFiles,
+      isDragging,
+      mcpTools,
+      mcpToolsCode,
+      parseError,
+      isLoading,
+      isEditMode,
+      showSuccess,
+      showProjectExistsDialog,
+      existingProjectName
+    },
+    setSelectedProject,
+    setProjectFiles,
+    setProjectName,
+    setProjectBackground,
+    setKnowledgeBaseFiles,
+    setIsDragging,
+    setMcpTools,
+    setMcpToolsCode,
+    setParseError,
+    setProjectLoading,
+    setIsEditMode,
+    setShowSuccess,
+    setShowProjectExistsDialog,
+    setExistingProjectName
+  } = useAppStore()
 
   useEffect(() => {
     // Fetch the list of project folders
@@ -125,7 +138,7 @@ export function ProjectOverview() {
     }
 
     // 加载选中项目的数据
-    setIsLoading(true)
+    setProjectLoading(true)
     try {
       const response = await fetch(`/api/history-projects?projectName=${encodeURIComponent(projectName)}`)
       if (response.ok) {
@@ -157,7 +170,7 @@ export function ProjectOverview() {
     } catch (error) {
       console.error("Error loading project data:", error)
     } finally {
-      setIsLoading(false)
+      setProjectLoading(false)
     }
   }
 
@@ -217,7 +230,7 @@ export function ProjectOverview() {
       return
     }
 
-    setIsLoading(true)
+    setProjectLoading(true)
     setShowSuccess(false)
 
     try {
@@ -273,7 +286,7 @@ export function ProjectOverview() {
       console.error("Error saving project:", error)
       alert(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`)
     } finally {
-      setIsLoading(false)
+      setProjectLoading(false)
     }
   }
 
@@ -302,7 +315,7 @@ export function ProjectOverview() {
   const handleProjectExistsReplace = async () => {
     if (!existingProjectName) return
 
-    setIsLoading(true)
+    setProjectLoading(true)
     setShowProjectExistsDialog(false)
 
     try {
@@ -354,7 +367,7 @@ export function ProjectOverview() {
       console.error("Error replacing project:", error)
       alert(`替换项目失败: ${error instanceof Error ? error.message : "未知错误"}`)
     } finally {
-      setIsLoading(false)
+      setProjectLoading(false)
       setExistingProjectName("")
     }
   }
@@ -471,15 +484,15 @@ export function ProjectOverview() {
       description: "",
       returnValue: ""
     }
-    setMcpTools([...mcpTools, newTool])
+    setMcpTools([...(mcpTools || []), newTool])
   }
 
   const removeMcpTool = (id: string) => {
-    setMcpTools(mcpTools.filter(tool => tool.id !== id))
+    setMcpTools((mcpTools || []).filter(tool => tool.id !== id))
   }
 
   const updateMcpTool = (id: string, field: 'methodName' | 'methodParams' | 'description' | 'returnValue', value: string) => {
-    setMcpTools(mcpTools.map(tool => 
+    setMcpTools((mcpTools || []).map(tool =>
       tool.id === id ? { ...tool, [field]: value } : tool
     ))
   }
@@ -573,7 +586,7 @@ export function ProjectOverview() {
       }))
 
       // 追加到现有工具列表
-      setMcpTools([...mcpTools, ...newTools])
+      setMcpTools([...(mcpTools || []), ...newTools])
     } catch (error) {
       setParseError(`解析失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
@@ -602,7 +615,7 @@ export function ProjectOverview() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="自定义">自定义</SelectItem>
-                {projectFiles.map((projectName) => (
+                {(projectFiles || []).map((projectName) => (
                   <SelectItem key={projectName} value={projectName}>
                     {projectName}
                   </SelectItem>
@@ -683,11 +696,11 @@ export function ProjectOverview() {
           </div>
 
           {/* 选择的文件路径显示 */}
-          {knowledgeBaseFiles.length > 0 && (
+          {(knowledgeBaseFiles || []).length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-foreground">
-                  已选择的文件 ({knowledgeBaseFiles.length})
+                  已选择的文件 ({(knowledgeBaseFiles || []).length})
                 </h3>
                 <Button
                   variant="ghost"
@@ -700,7 +713,7 @@ export function ProjectOverview() {
                 </Button>
               </div>
               <div className="bg-muted/50 rounded-lg p-4 max-h-60 overflow-y-auto">
-                {knowledgeBaseFiles.map((filePath, index) => (
+                {(knowledgeBaseFiles || []).map((filePath, index) => (
                   <div key={index} className="flex items-center gap-2 py-1">
                     <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <span className="text-sm text-foreground font-mono break-all">
@@ -756,7 +769,7 @@ export function ProjectOverview() {
               </div>
             </div>
 
-            {mcpTools.map((tool, index) => (
+            {(mcpTools || []).map((tool, index) => (
               <div key={tool.id} className="border border-border rounded-lg p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-medium text-foreground">Tool call {index + 1}</h3>
