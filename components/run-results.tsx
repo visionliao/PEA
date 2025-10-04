@@ -15,7 +15,7 @@ export function RunResults() {
   const [showValidationDialog, setShowValidationDialog] = useState(false)
   const [validationMessage, setValidationMessage] = useState("")
   const [currentTask, setCurrentTask] = useState(0)
-  const [totalTasks, setTotalTasks] = useState(100)
+  const [totalTasks, setTotalTasks] = useState(0)
   const [progress, setProgress] = useState(0)
   const [isExecuting, setIsExecuting] = useState(false)
 
@@ -110,8 +110,14 @@ export function RunResults() {
       const newTask = prev + taskIncrement
       let currentTotalTasks = totalTasks
 
+      // 如果totalTasks为0，重新计算正确的总数
+      if (currentTotalTasks === 0) {
+        currentTotalTasks = calculateTotalTasks()
+        setTotalTasks(currentTotalTasks)
+      }
+
       // 评分阈值模式下动态扩展总任务数
-      if (!testLoopEnabled && newTask >= totalTasks) {
+      if (!testLoopEnabled && newTask >= currentTotalTasks) {
         currentTotalTasks = newTask + 100
         setTotalTasks(currentTotalTasks)
       }
@@ -119,6 +125,9 @@ export function RunResults() {
       // 计算进度百分比
       const newProgress = (newTask / currentTotalTasks) * 100
       setProgress(Math.min(newProgress, 100))
+
+      // 调试信息
+      console.log(`进度更新: ${newTask}/${currentTotalTasks} = ${newProgress}% (模式: ${testLoopEnabled ? '循环' : '评分阈值'})`)
 
       return newTask
     })
@@ -175,7 +184,6 @@ export function RunResults() {
     setIsExecuting(false)
     setCurrentTask(0)
     setProgress(0)
-    setTotalTasks(100)
   }
 
   const handleRun = async () => {
@@ -218,10 +226,19 @@ export function RunResults() {
 
     // 重置进度状态
     const calculatedTotalTasks = calculateTotalTasks()
-    setTotalTasks(calculatedTotalTasks)
-    setCurrentTask(0)
-    setProgress(0)
-    setIsExecuting(true)
+    console.log(`计算的总任务数: ${calculatedTotalTasks}`)
+
+    // 使用 Promise 确保 states 按顺序更新
+    await new Promise(resolve => {
+      setTotalTasks(calculatedTotalTasks)
+      setCurrentTask(0)
+      setProgress(0)
+      setIsExecuting(true)
+      resolve(null)
+    })
+
+    // 再次验证 totalTasks 是否正确设置
+    console.log(`任务开始 - totalTasks 应该是 ${calculatedTotalTasks}`)
 
     // 开始运行
     startRun()
@@ -234,6 +251,7 @@ export function RunResults() {
       // 按 (框架数 + (框架数×问题数) + (框架数×问题数)) × 循环次数 的顺序执行
       // 1. 生成提示词框架任务 (每个框架在每个循环中执行一次)
       for (let k = 0; k < actualLoopCount; k++) {
+
         for (let i = 0; i < selectedFrameworksCount; i++) {
           await new Promise(resolve => setTimeout(resolve, 50))
           updateTaskProgress(1)
