@@ -5,13 +5,18 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useAppStore } from "@/store/app-store"
 import { useState, useEffect } from "react"
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react"
 
 export function RunResults() {
   const [testCasesCount, setTestCasesCount] = useState(0)
+  const [showValidationDialog, setShowValidationDialog] = useState(false)
+  const [validationMessage, setValidationMessage] = useState("")
+  const [currentTask, setCurrentTask] = useState(0)
+  const [totalTasks, setTotalTasks] = useState(100)
+  const [progress, setProgress] = useState(0)
 
   const {
     runResultsConfig: {
@@ -76,6 +81,99 @@ export function RunResults() {
     if (enabled && testLoopEnabled) {
       setTestLoopEnabled(false)
     }
+    // 启用评分阈值时，默认设置为最大值
+    if (enabled && totalTestScore > 0) {
+      setScoreThreshold(totalTestScore)
+    }
+  }
+
+  // 计算总任务数
+  const calculateTotalTasks = () => {
+    const selectedFrameworksCount = promptFrameworkConfig.selectedFrameworks instanceof Set ? promptFrameworkConfig.selectedFrameworks.size : 0
+
+    // 基础任务：(框架数 + (框架数×问题数) + (框架数×问题数))
+    const baseTasks = selectedFrameworksCount + (selectedFrameworksCount * testCasesCount) + (selectedFrameworksCount * testCasesCount)
+
+    if (testLoopEnabled) {
+      // 循环测试模式：基础任务 × 循环次数
+      return baseTasks * testLoopCount
+    } else {
+      // 评分阈值模式：基础任务 × 10(固定循环次数)
+      return baseTasks * 10
+    }
+  }
+
+  // 更新任务进度
+  const updateTaskProgress = (taskIncrement: number = 1) => {
+    setCurrentTask(prev => {
+      const newTask = prev + taskIncrement
+      let currentTotalTasks = totalTasks
+
+      // 评分阈值模式下动态扩展总任务数
+      if (!testLoopEnabled && newTask >= totalTasks) {
+        currentTotalTasks = newTask + 100
+        setTotalTasks(currentTotalTasks)
+      }
+
+      // 计算进度百分比
+      const newProgress = (newTask / currentTotalTasks) * 100
+      setProgress(Math.min(newProgress, 100))
+
+      return newTask
+    })
+  }
+
+  // 验证运行条件
+  const validateRunConditions = () => {
+    const errors = []
+
+    // 检查提示词框架
+    const selectedFrameworksCount = promptFrameworkConfig.selectedFrameworks instanceof Set ? promptFrameworkConfig.selectedFrameworks.size : 0
+    if (selectedFrameworksCount === 0) {
+      errors.push("请至少选择一个提示词框架")
+    }
+
+    // 检查模型配置
+    if (!modelSettingsConfig.promptModel) {
+      errors.push("请选择提示词模型")
+    }
+    if (!modelSettingsConfig.workModel) {
+      errors.push("请选择工作模型")
+    }
+    if (!modelSettingsConfig.scoreModel) {
+      errors.push("请选择评分模型")
+    }
+
+    // 检查测试题集
+    if (testCasesCount === 0) {
+      errors.push("请配置测试题集")
+    }
+
+    // 检查测试依据
+    if (!testLoopEnabled && !scoreThresholdEnabled) {
+      errors.push("请至少开启一个测试依据（启用循环测试或启用评分阈值）")
+    }
+
+    return errors
+  }
+
+  // 处理运行按钮点击
+  const handleRunClick = () => {
+    const errors = validateRunConditions()
+    if (errors.length > 0) {
+      setValidationMessage(errors.join("\n"))
+      setShowValidationDialog(true)
+      return
+    }
+    handleRun()
+  }
+
+  // 处理停止运行
+  const handleStopClick = () => {
+    stopRun()
+    setCurrentTask(0)
+    setProgress(0)
+    setTotalTasks(100)
   }
 
   const handleRun = async () => {
@@ -110,12 +208,54 @@ export function RunResults() {
 
     console.log("当前配置：", JSON.stringify(config, null, 2))
 
+    // 重置进度状态
+    const calculatedTotalTasks = calculateTotalTasks()
+    setTotalTasks(calculatedTotalTasks)
+    setCurrentTask(0)
+    setProgress(0)
+
     // 开始运行
     startRun()
 
     try {
-      // 模拟异步任务
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      // 模拟任务执行流程
+      const selectedFrameworksCount = promptFrameworkConfig.selectedFrameworks instanceof Set ? promptFrameworkConfig.selectedFrameworks.size : 0
+      const actualLoopCount = testLoopEnabled ? testLoopCount : 10
+
+      // 按 (框架数 + (框架数×问题数) + (框架数×问题数)) × 循环次数 的顺序执行
+      // 1. 生成提示词框架任务 (每个框架在每个循环中执行一次)
+      for (let k = 0; k < actualLoopCount; k++) {
+        for (let i = 0; i < selectedFrameworksCount; i++) {
+          await new Promise(resolve => setTimeout(resolve, 50))
+          updateTaskProgress(1)
+        }
+      }
+
+      // 2. 工作模型运行任务 (每个框架的每个问题在每个循环中执行一次)
+      for (let k = 0; k < actualLoopCount; k++) {
+        for (let i = 0; i < selectedFrameworksCount; i++) {
+          for (let j = 0; j < testCasesCount; j++) {
+            await new Promise(resolve => setTimeout(resolve, 30))
+            updateTaskProgress(1)
+
+            // 模拟评分阈值提前停止
+            if (!testLoopEnabled && Math.random() > 0.95) {
+              console.log("达到评分阈值，提前停止测试")
+              break
+            }
+          }
+        }
+      }
+
+      // 3. 评分模型任务 (每个框架的每个问题在每个循环中执行一次)
+      for (let k = 0; k < actualLoopCount; k++) {
+        for (let i = 0; i < selectedFrameworksCount; i++) {
+          for (let j = 0; j < testCasesCount; j++) {
+            await new Promise(resolve => setTimeout(resolve, 20))
+            updateTaskProgress(1)
+          }
+        }
+      }
 
       // 模拟结果
       const results = [
@@ -329,27 +469,30 @@ export function RunResults() {
 
         {/* Run section */}
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-4">
+            {runStatus?.isRunning && (
+              <div className="flex items-center gap-3 flex-1">
+                <div className="flex items-center justify-between text-sm text-muted-foreground w-40">
+                  <span>任务进度</span>
+                  <span className="font-mono">{currentTask}/{totalTasks}</span>
+                </div>
+                <div className="flex-1 bg-muted rounded-full h-2">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
             <Button
-              onClick={handleRun}
-              disabled={runStatus?.isRunning}
-              className="bg-foreground text-background hover:bg-foreground/90"
+              onClick={runStatus?.isRunning ? handleStopClick : handleRunClick}
+              className={runStatus?.isRunning
+                ? "bg-red-500 hover:bg-red-600 text-white flex-shrink-0"
+                : "bg-foreground text-background hover:bg-foreground/90 flex-shrink-0"}
             >
-              {runStatus?.isRunning ? "运行中..." : "开始运行"}
+              {runStatus?.isRunning ? "停止运行" : "开始运行"}
             </Button>
           </div>
-
-          {runStatus?.isRunning && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2 text-blue-800">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                <span className="text-sm font-medium">任务运行中...</span>
-              </div>
-              <div className="text-xs text-blue-600 mt-1">
-                开始时间: {runStatus?.startTime?.toLocaleString()}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Results section */}
@@ -387,18 +530,34 @@ export function RunResults() {
             </div>
           )}
 
-          {!runStatus?.results || runStatus.results.length === 0 && (
-            <div className="p-8 text-center border border-dashed border-border rounded-lg">
+          <div className="p-8 text-center border border-dashed border-border rounded-lg">
               <div className="text-muted-foreground text-sm">暂无运行结果</div>
               <div className="text-muted-foreground text-xs mt-1">点击“开始运行”执行任务</div>
             </div>
-          )}
-
-          <div className="min-h-[300px] p-6 bg-muted/20 rounded-lg border border-border">
-            <p className="text-sm text-muted-foreground text-center">暂无运行结果</p>
-          </div>
         </div>
       </div>
+
+      {/* 验证对话框 */}
+      <Dialog open={showValidationDialog} onOpenChange={setShowValidationDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-500" />
+              无法运行
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground whitespace-pre-line">
+              {validationMessage}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setShowValidationDialog(false)}>
+                我知道了
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
