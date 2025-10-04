@@ -253,26 +253,6 @@ export function RunResults() {
             <p className="text-sm text-muted-foreground text-center">暂无运行结果</p>
           </div>
         </div>
-
-        {/* History section */}
-        <div className="space-y-4 pt-6 border-t border-border">
-          <div>
-            <Label className="text-base font-medium text-foreground">运行历史</Label>
-            <p className="text-sm text-muted-foreground mt-1">查看历史运行记录</p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="p-4 bg-muted/20 rounded-lg border border-border hover:bg-muted/30 transition-colors cursor-pointer">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">运行记录 #1</p>
-                  <p className="text-xs text-muted-foreground mt-1">2024-01-15 14:30:25</p>
-                </div>
-                <span className="text-xs px-2 py-1 bg-green-500/10 text-green-600 rounded">成功</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )
