@@ -40,15 +40,40 @@ export async function POST(request: Request) {
     const copiedFiles = []
     for (const filePath of knowledgeBaseFiles) {
       try {
-        // 假设知识库文件在项目根目录下
-        const sourcePath = join(process.cwd(), filePath)
-        const destPath = join(knowledgeDir, filePath.split('/').pop() || filePath)
-        
-        await copyFile(sourcePath, destPath)
-        copiedFiles.push({
-          original: filePath,
-          copied: `${projectName}/knowledge/${filePath.split('/').pop() || filePath}`
-        })
+        // 从请求数据中获取文件对象
+        const fileData = body.fileData?.find((f: any) => f.path === filePath)
+
+        if (fileData && fileData.content) {
+          // 如果有文件内容数据，直接写入文件
+          const destPath = join(knowledgeDir, filePath.split('/').pop() || filePath)
+
+          // 处理 data URL 格式 (data:text/plain;base64,...)
+          let content = fileData.content
+          if (content.startsWith('data:')) {
+            // 移除 data URL 前缀，只保留 base64 部分
+            const base64Content = content.split(',')[1]
+            if (base64Content) {
+              content = base64Content
+            }
+          }
+
+          const buffer = Buffer.from(content, 'base64')
+          await writeFile(destPath, buffer)
+          copiedFiles.push({
+            original: filePath,
+            copied: `${projectName}/knowledge/${filePath.split('/').pop() || filePath}`
+          })
+        } else {
+          // 如果没有文件内容，尝试从文件系统复制（向后兼容）
+          const sourcePath = join(process.cwd(), filePath)
+          const destPath = join(knowledgeDir, filePath.split('/').pop() || filePath)
+
+          await copyFile(sourcePath, destPath)
+          copiedFiles.push({
+            original: filePath,
+            copied: `${projectName}/knowledge/${filePath.split('/').pop() || filePath}`
+          })
+        }
       } catch (error) {
         console.error(`Error copying file ${filePath}:`, error)
       }

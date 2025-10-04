@@ -79,6 +79,7 @@ export function ProjectOverview() {
       projectName,
       projectBackground,
       knowledgeBaseFiles,
+      knowledgeBaseFileData,
       isDragging,
       mcpTools,
       mcpToolsCode,
@@ -94,6 +95,7 @@ export function ProjectOverview() {
     setProjectName,
     setProjectBackground,
     setKnowledgeBaseFiles,
+    setKnowledgeBaseFileData,
     setIsDragging,
     setMcpTools,
     setMcpToolsCode,
@@ -148,6 +150,7 @@ export function ProjectOverview() {
         setProjectName(projectData.projectName || projectName)
         setProjectBackground(projectData.projectBackground || "")
         setKnowledgeBaseFiles(projectData.knowledgeBaseFiles || [])
+        setKnowledgeBaseFileData([]) // 重置文件数据，因为重新加载项目时需要重新选择文件
 
         // 处理 MCP Tools
         if (projectData.mcpTools && projectData.mcpTools.length > 0) {
@@ -243,6 +246,7 @@ export function ProjectOverview() {
           projectName: projectName.trim(),
           projectBackground: projectBackground.trim(),
           knowledgeBaseFiles: knowledgeBaseFiles,
+          fileData: knowledgeBaseFileData,
           mcpTools: mcpTools
         }),
       })
@@ -296,6 +300,7 @@ export function ProjectOverview() {
     setProjectName("")
     setProjectBackground("")
     setKnowledgeBaseFiles([])
+    setKnowledgeBaseFileData([])
     setMcpTools([])
     setMcpToolsCode("")
     setParseError("")
@@ -329,6 +334,7 @@ export function ProjectOverview() {
           projectName: projectName.trim(),
           projectBackground: projectBackground.trim(),
           knowledgeBaseFiles: knowledgeBaseFiles,
+          fileData: knowledgeBaseFileData,
           mcpTools: mcpTools,
           force: true
         }),
@@ -377,27 +383,68 @@ export function ProjectOverview() {
     if (!files) return
 
     const newFilePaths: string[] = []
+    const newFileData: any[] = []
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const path = file.webkitRelativePath || file.name
+    // 处理文件读取
+    const processFiles = async () => {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        const path = file.webkitRelativePath || file.name
 
-      if (file.webkitRelativePath) {
-        // 如果是文件夹中的文件，webkitRelativePath 会包含相对路径
-        const parts = path.split('/')
-        const folderName = parts[0]
-        const fileName = parts.slice(1).join('/')
-        newFilePaths.push(`${folderName}/${fileName}`)
-      } else {
-        // 单个文件
-        newFilePaths.push(file.name)
+        if (file.webkitRelativePath) {
+          // 如果是文件夹中的文件，webkitRelativePath 会包含相对路径
+          const parts = path.split('/')
+          const folderName = parts[0]
+          const fileName = parts.slice(1).join('/')
+          const fullPath = `${folderName}/${fileName}`
+          newFilePaths.push(fullPath)
+        } else {
+          // 单个文件
+          newFilePaths.push(file.name)
+        }
+
+        // 读取文件内容
+        try {
+          const fileContent = await readFileAsBase64(file)
+          newFileData.push({
+            path: file.webkitRelativePath || file.name,
+            content: fileContent,
+            name: file.name,
+            size: file.size,
+            type: file.type
+          })
+        } catch (error) {
+          console.error(`Error reading file ${file.name}:`, error)
+        }
       }
+
+      // 调试：打印选择的文件路径和文件数据
+      console.log("选择的文件路径:", newFilePaths)
+      console.log("文件数据:", newFileData)
+
+      // 追加新文件到现有列表，避免重复
+      const existingFilesSet = new Set(knowledgeBaseFiles)
+      const uniqueNewFiles = newFilePaths.filter(file => !existingFilesSet.has(file))
+
+      // 追加新文件数据到现有列表
+      const existingFilesDataMap = new Map((knowledgeBaseFileData || []).map(f => [f.path, f]))
+      const uniqueNewFileData = newFileData.filter(f => !existingFilesDataMap.has(f.path))
+
+      setKnowledgeBaseFiles([...knowledgeBaseFiles, ...uniqueNewFiles])
+      setKnowledgeBaseFileData([...(knowledgeBaseFileData || []), ...uniqueNewFileData])
     }
 
-    // 追加新文件到现有列表，避免重复
-    const existingFilesSet = new Set(knowledgeBaseFiles)
-    const uniqueNewFiles = newFilePaths.filter(file => !existingFilesSet.has(file))
-    setKnowledgeBaseFiles([...knowledgeBaseFiles, ...uniqueNewFiles])
+    processFiles()
+  }
+
+  // 辅助函数：将文件读取为Base64
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(file)
+    })
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -418,62 +465,91 @@ export function ProjectOverview() {
     if (!items) return
 
     const newFilePaths: string[] = []
+    const newFileData: any[] = []
     const processedEntries = new Set<string>()
 
     // 递归处理文件系统中的条目
-    const processEntry = (entry: FileSystemEntry, relativePath = '') => {
+    const processEntry = async (entry: FileSystemEntry, relativePath = '') => {
       if (processedEntries.has(entry.fullPath)) return
       processedEntries.add(entry.fullPath)
 
       if (entry.isFile) {
         const fileEntry = entry as FileSystemFileEntry
-        fileEntry.file((file) => {
-          const filePath = relativePath ? `${relativePath}/${file.name}` : file.name
-          newFilePaths.push(filePath)
+        return new Promise<void>((resolve) => {
+          fileEntry.file(async (file) => {
+            const filePath = relativePath ? `${relativePath}/${file.name}` : file.name
+            newFilePaths.push(filePath)
+
+            try {
+              const fileContent = await readFileAsBase64(file)
+              newFileData.push({
+                path: filePath,
+                content: fileContent,
+                name: file.name,
+                size: file.size,
+                type: file.type
+              })
+            } catch (error) {
+              console.error(`Error reading file ${file.name}:`, error)
+            }
+            resolve()
+          })
         })
       } else if (entry.isDirectory) {
         const dirEntry = entry as FileSystemDirectoryEntry
         const dirReader = dirEntry.createReader()
 
-        dirReader.readEntries((entries) => {
-          entries.forEach((entry) => {
-            const newRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name
-            processEntry(entry, newRelativePath)
+        return new Promise<void>((resolve) => {
+          dirReader.readEntries(async (entries) => {
+            for (const entry of entries) {
+              const newRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name
+              await processEntry(entry, newRelativePath)
+            }
+            resolve()
           })
         })
       }
     }
 
     // 处理拖拽的项目
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      const entry = item.webkitGetAsEntry()
+    const processDroppedItems = async () => {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        const entry = item.webkitGetAsEntry()
 
-      if (entry) {
-        if (entry.isFile) {
-          // 处理单个文件
-          const fileEntry = entry as FileSystemFileEntry
-          fileEntry.file((file) => {
-            newFilePaths.push(file.name)
-          })
-        } else if (entry.isDirectory) {
-          // 处理文件夹 - 递归获取所有文件
-          processEntry(entry, entry.name)
+        if (entry) {
+          if (entry.isFile) {
+            // 处理单个文件
+            await processEntry(entry)
+          } else if (entry.isDirectory) {
+            // 处理文件夹 - 递归获取所有文件
+            await processEntry(entry, entry.name)
+          }
         }
       }
-    }
 
-    // 延迟更新状态，确保所有异步操作完成
-    setTimeout(() => {
+      // 调试：打印拖拽的文件路径和文件数据
+      console.log("拖拽的文件路径:", newFilePaths)
+      console.log("拖拽的文件数据:", newFileData)
+
       // 追加新文件到现有列表，避免重复
       const existingFilesSet = new Set(knowledgeBaseFiles)
       const uniqueNewFiles = newFilePaths.filter(file => !existingFilesSet.has(file))
+
+      // 追加新文件数据到现有列表
+      const existingFilesDataMap = new Map((knowledgeBaseFileData || []).map(f => [f.path, f]))
+      const uniqueNewFileData = newFileData.filter(f => !existingFilesDataMap.has(f.path))
+
       setKnowledgeBaseFiles([...knowledgeBaseFiles, ...uniqueNewFiles])
-    }, 100)
+      setKnowledgeBaseFileData([...(knowledgeBaseFileData || []), ...uniqueNewFileData])
+    }
+
+    processDroppedItems()
   }
 
   const clearKnowledgeBaseFiles = () => {
     setKnowledgeBaseFiles([])
+    setKnowledgeBaseFileData([])
   }
 
   const addMcpTool = () => {

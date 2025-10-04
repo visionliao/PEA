@@ -73,6 +73,7 @@ interface AppState {
     projectName: string
     projectBackground: string
     knowledgeBaseFiles: string[]
+    knowledgeBaseFileData: any[]
     isDragging: boolean
     mcpTools: McpTool[]
     mcpToolsCode: string
@@ -136,6 +137,7 @@ interface AppState {
   setProjectName: (name: string) => void
   setProjectBackground: (background: string) => void
   setKnowledgeBaseFiles: (files: string[]) => void
+  setKnowledgeBaseFileData: (fileData: any[]) => void
   setIsDragging: (dragging: boolean) => void
   setMcpTools: (tools: McpTool[]) => void
   setMcpToolsCode: (code: string) => void
@@ -209,6 +211,7 @@ export const useAppStore = create<AppState>()(
         projectName: "",
         projectBackground: "",
         knowledgeBaseFiles: [],
+        knowledgeBaseFileData: [],
         isDragging: false,
         mcpTools: [],
         mcpToolsCode: "",
@@ -279,6 +282,9 @@ export const useAppStore = create<AppState>()(
       setKnowledgeBaseFiles: (files) => 
         get().updateProjectConfig({ knowledgeBaseFiles: files }),
       
+      setKnowledgeBaseFileData: (fileData) =>
+        get().updateProjectConfig({ knowledgeBaseFileData: fileData }),
+
       setIsDragging: (dragging) => 
         get().updateProjectConfig({ isDragging: dragging }),
       
