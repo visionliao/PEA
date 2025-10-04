@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useAppStore } from "@/store/app-store"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react"
 
 export function RunResults() {
@@ -18,6 +18,8 @@ export function RunResults() {
   const [totalTasks, setTotalTasks] = useState(0)
   const [progress, setProgress] = useState(0)
   const [isExecuting, setIsExecuting] = useState(false)
+  const [isCancelled, setIsCancelled] = useState(false)
+  const cancelledRef = useRef(false)
 
   const {
     runResultsConfig: {
@@ -127,7 +129,7 @@ export function RunResults() {
       setProgress(Math.min(newProgress, 100))
 
       // 调试信息
-      console.log(`进度更新: ${newTask}/${currentTotalTasks} = ${newProgress}% (模式: ${testLoopEnabled ? '循环' : '评分阈值'})`)
+      // console.log(`进度更新: ${newTask}/${currentTotalTasks} = ${newProgress}% (模式: ${testLoopEnabled ? '循环' : '评分阈值'})`)
 
       return newTask
     })
@@ -180,6 +182,8 @@ export function RunResults() {
 
   // 处理停止运行
   const handleStopClick = () => {
+    setIsCancelled(true)
+    cancelledRef.current = true
     stopRun()
     setIsExecuting(false)
     setCurrentTask(0)
@@ -228,6 +232,10 @@ export function RunResults() {
     const calculatedTotalTasks = calculateTotalTasks()
     console.log(`计算的总任务数: ${calculatedTotalTasks}`)
 
+    // 重置取消标志
+    setIsCancelled(false)
+    cancelledRef.current = false
+
     // 使用 Promise 确保 states 按顺序更新
     await new Promise(resolve => {
       setTotalTasks(calculatedTotalTasks)
@@ -251,8 +259,14 @@ export function RunResults() {
       // 按 (框架数 + (框架数×问题数) + (框架数×问题数)) × 循环次数 的顺序执行
       // 1. 生成提示词框架任务 (每个框架在每个循环中执行一次)
       for (let k = 0; k < actualLoopCount; k++) {
+        // 检查是否取消
+        if (cancelledRef.current) {
+          console.log("任务被取消，停止执行")
+          break
+        }
 
         for (let i = 0; i < selectedFrameworksCount; i++) {
+          if (cancelledRef.current) break
           await new Promise(resolve => setTimeout(resolve, 50))
           updateTaskProgress(1)
         }
@@ -260,8 +274,17 @@ export function RunResults() {
 
       // 2. 工作模型运行任务 (每个框架的每个问题在每个循环中执行一次)
       for (let k = 0; k < actualLoopCount; k++) {
+        if (cancelledRef.current) {
+          console.log("任务被取消，停止执行")
+          break
+        }
+
         for (let i = 0; i < selectedFrameworksCount; i++) {
+          if (cancelledRef.current) break
+
           for (let j = 0; j < testCasesCount; j++) {
+            if (cancelledRef.current) break
+
             await new Promise(resolve => setTimeout(resolve, 30))
             updateTaskProgress(1)
 
@@ -276,8 +299,17 @@ export function RunResults() {
 
       // 3. 评分模型任务 (每个框架的每个问题在每个循环中执行一次)
       for (let k = 0; k < actualLoopCount; k++) {
+        if (cancelledRef.current) {
+          console.log("任务被取消，停止执行")
+          break
+        }
+
         for (let i = 0; i < selectedFrameworksCount; i++) {
+          if (cancelledRef.current) break
+
           for (let j = 0; j < testCasesCount; j++) {
+            if (cancelledRef.current) break
+
             await new Promise(resolve => setTimeout(resolve, 20))
             updateTaskProgress(1)
           }
@@ -314,11 +346,14 @@ export function RunResults() {
         }
       ]
 
-      setRunResults(results)
+      // 只有在没有被取消的情况下才设置结果
+      if (!cancelledRef.current) {
+        setRunResults(results)
+      }
       stopRun()
       setIsExecuting(false)
 
-      console.log("=== 任务运行完成 ===")
+      console.log(`=== 任务${cancelledRef.current ? '被取消' : '运行完成'} ===`)
 
     } catch (error) {
       console.error("任务运行失败：", error)
