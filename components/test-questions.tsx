@@ -40,6 +40,21 @@ export function TestQuestions() {
     setEditingId(question.id)
     setEditQuestion(question.question)
     setEditAnswer(question.answer)
+
+    // 延迟调整高度，确保 DOM 更新后执行
+    setTimeout(() => {
+      const editQuestionElement = document.querySelector(`textarea[placeholder="请输入问题..."]`) as HTMLTextAreaElement
+      const editAnswerElement = document.querySelector(`textarea[placeholder="请输入标准答案..."]`) as HTMLTextAreaElement
+
+      if (editQuestionElement) {
+        editQuestionElement.style.height = "auto"
+        editQuestionElement.style.height = editQuestionElement.scrollHeight + "px"
+      }
+      if (editAnswerElement) {
+        editAnswerElement.style.height = "auto"
+        editAnswerElement.style.height = editAnswerElement.scrollHeight + "px"
+      }
+    }, 0)
   }
 
   const handleSaveEdit = (id: string) => {
@@ -91,21 +106,51 @@ export function TestQuestions() {
             {editingId === question.id ? (
               <>
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">问题</Label>
-                  <Textarea
+                  <textarea
+                    ref={(el) => {
+                      if (el) {
+                        el.style.height = "auto"
+                        el.style.height = el.scrollHeight + "px"
+                      }
+                    }}
                     value={editQuestion}
-                    onChange={(e) => setEditQuestion(e.target.value)}
-                    className="min-h-[60px] resize-none border-border focus:border-foreground"
+                    onChange={(e) => {
+                      setEditQuestion(e.target.value)
+                      e.target.style.height = "auto"
+                      e.target.style.height = e.target.scrollHeight + "px"
+                    }}
                     placeholder="请输入问题..."
+                    className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                    rows={1}
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement
+                      target.style.height = "auto"
+                      target.style.height = target.scrollHeight + "px"
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">标准答案</Label>
-                  <Textarea
+                  <textarea
+                    ref={(el) => {
+                      if (el) {
+                        el.style.height = "auto"
+                        el.style.height = el.scrollHeight + "px"
+                      }
+                    }}
                     value={editAnswer}
-                    onChange={(e) => setEditAnswer(e.target.value)}
-                    className="min-h-[120px] resize-none border-border focus:border-foreground"
+                    onChange={(e) => {
+                      setEditAnswer(e.target.value)
+                      e.target.style.height = "auto"
+                      e.target.style.height = e.target.scrollHeight + "px"
+                    }}
                     placeholder="请输入标准答案..."
+                    className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                    rows={1}
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement
+                      target.style.height = "auto"
+                      target.style.height = target.scrollHeight + "px"
+                    }}
                   />
                 </div>
                 <div className="flex justify-end gap-2">
@@ -131,11 +176,9 @@ export function TestQuestions() {
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">问题</Label>
                   <p className="text-sm text-foreground">{question.question}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">标准答案</Label>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{question.answer}</p>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
@@ -166,21 +209,39 @@ export function TestQuestions() {
         {isAdding && (
           <div className="border border-border rounded-lg p-4 space-y-3 bg-background">
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">问题</Label>
-              <Textarea
+              <textarea
                 value={newQuestion}
-                onChange={(e) => setNewQuestion(e.target.value)}
-                className="min-h-[60px] resize-none border-border focus:border-foreground"
+                onChange={(e) => {
+                  setNewQuestion(e.target.value)
+                  e.target.style.height = "auto"
+                  e.target.style.height = e.target.scrollHeight + "px"
+                }}
                 placeholder="请输入问题..."
+                className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                rows={1}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  target.style.height = "auto"
+                  target.style.height = target.scrollHeight + "px"
+                }}
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">标准答案</Label>
-              <Textarea
+              <textarea
                 value={newAnswer}
-                onChange={(e) => setNewAnswer(e.target.value)}
-                className="min-h-[120px] resize-none border-border focus:border-foreground"
+                onChange={(e) => {
+                  setNewAnswer(e.target.value)
+                  e.target.style.height = "auto"
+                  e.target.style.height = e.target.scrollHeight + "px"
+                }}
                 placeholder="请输入标准答案..."
+                className="w-full px-0 py-2 text-sm bg-transparent border-0 border-b border-border focus:border-foreground focus:outline-none resize-none transition-colors overflow-hidden"
+                rows={1}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  target.style.height = "auto"
+                  target.style.height = target.scrollHeight + "px"
+                }}
               />
             </div>
             <div className="flex justify-end gap-2">
