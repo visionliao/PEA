@@ -1,45 +1,56 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Pencil, Trash2, X, Check } from "lucide-react"
+import { Pencil, Trash2, X, Check, Loader2 } from "lucide-react"
 
 interface Question {
-  id: string
+  id: number
   question: string
   answer: string
+  score: number
 }
 
 export function TestQuestions() {
-  const [questions, setQuestions] = useState<Question[]>([
-    {
-      id: "1",
-      question: "我有一只猫，你们可以养宠物吧？",
-      answer:
-        "您好！是的，我们社区非常欢迎携带宠物入住。关于宠物入住，我们有以下规定：宠物租金： 单只宠物每月需支付1000元人民币的租金。请您注意，在公共区域使用设施设备时，也请让宠物远离设备和热水，确保安全。",
-    },
-    {
-      id: "2",
-      question: "公寓概况与设施",
-      answer:
-        "驻在星耀 (The Spark by Greystar)公寓位于中国上海市静安区虬江路931号。项目由Greystar运营，致力于为城市租户打造一个充满活力、轻松无忧的国际化租赁社区。建筑概览：总用地面积8292平方米，总建筑面积51593.86平方米，地下2层，南塔地上21层，北塔地上16层，共579间房间。房型包括豪华单间、行政单间、一房豪华式公寓、两房行政公寓等多种户型。公共设施包括游泳池、健身房、瑜伽室、咖啡吧、会议室、KTV等。",
-    },
-  ])
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [editQuestion, setEditQuestion] = useState("")
   const [editAnswer, setEditAnswer] = useState("")
+  const [editScore, setEditScore] = useState(10)
 
   const [isAdding, setIsAdding] = useState(false)
   const [newQuestion, setNewQuestion] = useState("")
   const [newAnswer, setNewAnswer] = useState("")
+  const [newScore, setNewScore] = useState(10)
+  const [saving, setSaving] = useState(false)
+
+  // 加载测试题
+  useEffect(() => {
+    const loadQuestions = async () => {
+      try {
+        const response = await fetch("/api/test-cases")
+        if (response.ok) {
+          const data = await response.json()
+          setQuestions(data.checks)
+        }
+      } catch (error) {
+        console.error("Failed to load questions:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadQuestions()
+  }, [])
 
   const handleEdit = (question: Question) => {
     setEditingId(question.id)
     setEditQuestion(question.question)
     setEditAnswer(question.answer)
+    setEditScore(question.score)
 
     // 延迟调整高度，确保 DOM 更新后执行
     setTimeout(() => {
@@ -57,43 +68,130 @@ export function TestQuestions() {
     }, 0)
   }
 
-  const handleSaveEdit = (id: string) => {
-    setQuestions(questions.map((q) => (q.id === id ? { ...q, question: editQuestion, answer: editAnswer } : q)))
-    setEditingId(null)
-    setEditQuestion("")
-    setEditAnswer("")
+  const handleSaveEdit = async (id: number) => {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/test-cases', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'edit',
+          id,
+          question: editQuestion,
+          answer: editAnswer,
+          score: editScore
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setQuestions(data.data.checks)
+        setEditingId(null)
+        setEditQuestion("")
+        setEditAnswer("")
+        setEditScore(10)
+      } else {
+        alert('保存失败')
+      }
+    } catch (error) {
+      console.error('Error saving edit:', error)
+      alert('保存失败')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleCancelEdit = () => {
     setEditingId(null)
     setEditQuestion("")
     setEditAnswer("")
+    setEditScore(10)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: number) => {
     if (confirm("确定要删除这个问题吗？")) {
-      setQuestions(questions.filter((q) => q.id !== id))
+      try {
+        const response = await fetch('/api/test-cases', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'delete',
+            id
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setQuestions(data.data.checks)
+        } else {
+          alert('删除失败')
+        }
+      } catch (error) {
+        console.error('Error deleting:', error)
+        alert('删除失败')
+      }
     }
   }
 
-  const handleAddQuestion = () => {
+  const handleAddQuestion = async () => {
     if (newQuestion.trim() && newAnswer.trim()) {
-      const newQ: Question = {
-        id: Date.now().toString(),
-        question: newQuestion,
-        answer: newAnswer,
+      setSaving(true)
+      try {
+        const response = await fetch('/api/test-cases', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'add',
+            question: newQuestion,
+            answer: newAnswer,
+            score: newScore
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setQuestions(data.data.checks)
+          setNewQuestion("")
+          setNewAnswer("")
+          setNewScore(10)
+          setIsAdding(false)
+        } else {
+          alert('添加失败')
+        }
+      } catch (error) {
+        console.error('Error adding question:', error)
+        alert('添加失败')
+      } finally {
+        setSaving(false)
       }
-      setQuestions([...questions, newQ])
-      setNewQuestion("")
-      setNewAnswer("")
-      setIsAdding(false)
     }
   }
 
   const handleCancelAdd = () => {
     setNewQuestion("")
     setNewAnswer("")
+    setNewScore(10)
     setIsAdding(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-8 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto">
+        <div className="mb-6 border-b border-border pb-4 md:mb-8">
+          <h1 className="text-xl md:text-2xl font-semibold text-foreground">测试题集</h1>
+        </div>
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">加载测试题...</span>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -158,6 +256,7 @@ export function TestQuestions() {
                     variant="ghost"
                     size="sm"
                     onClick={handleCancelEdit}
+                    disabled={saving}
                     className="text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-4 w-4 mr-1" />
@@ -166,9 +265,10 @@ export function TestQuestions() {
                   <Button
                     size="sm"
                     onClick={() => handleSaveEdit(question.id)}
+                    disabled={saving}
                     className="bg-foreground text-background hover:bg-foreground/90"
                   >
-                    <Check className="h-4 w-4 mr-1" />
+                    {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
                     确定
                   </Button>
                 </div>
@@ -249,6 +349,7 @@ export function TestQuestions() {
                 variant="ghost"
                 size="sm"
                 onClick={handleCancelAdd}
+                disabled={saving}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-4 w-4 mr-1" />
@@ -257,9 +358,10 @@ export function TestQuestions() {
               <Button
                 size="sm"
                 onClick={handleAddQuestion}
+                disabled={saving}
                 className="bg-foreground text-background hover:bg-foreground/90"
               >
-                <Check className="h-4 w-4 mr-1" />
+                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
                 确定
               </Button>
             </div>
