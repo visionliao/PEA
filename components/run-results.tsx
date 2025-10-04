@@ -3,8 +3,11 @@
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/store/app-store"
+import { useState, useEffect } from "react"
 
 export function RunResults() {
+  const [testCasesCount, setTestCasesCount] = useState(0)
+
   const {
     runResultsConfig: {
       runStatus
@@ -17,6 +20,23 @@ export function RunResults() {
     setRunResults,
     setRunError
   } = useAppStore()
+
+  // 加载测试题集数据
+  useEffect(() => {
+    const loadTestCases = async () => {
+      try {
+        const response = await fetch("/api/test-cases")
+        if (response.ok) {
+          const data = await response.json()
+          setTestCasesCount(data.checks.length)
+        }
+      } catch (error) {
+        console.error("Failed to load test cases:", error)
+      }
+    }
+
+    loadTestCases()
+  }, [])
 
   const handleRun = async () => {
     console.log("=== 开始运行提示词工程任务 ===")
@@ -106,7 +126,7 @@ export function RunResults() {
             <p className="text-sm text-muted-foreground mt-1">各面板的配置信息</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             <div>
               <div className="font-medium text-foreground mb-1">项目概况</div>
               <div className="text-muted-foreground">
@@ -140,6 +160,19 @@ export function RunResults() {
               </div>
               <div className="text-muted-foreground">
                 评分: {modelSettingsConfig.scoreModel || "未选择"}
+              </div>
+            </div>
+
+            <div>
+              <div className="font-medium text-foreground mb-1">测试题集</div>
+              <div className="text-muted-foreground">
+                测试题: {testCasesCount} 个
+              </div>
+              <div className="text-muted-foreground">
+                状态: {testCasesCount > 0 ? "已配置" : "未配置"}
+              </div>
+              <div className="text-muted-foreground">
+                准备度: {testCasesCount > 0 ? "就绪" : "需添加"}
               </div>
             </div>
           </div>
