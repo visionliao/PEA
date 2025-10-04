@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { AlertTriangle } from "lucide-react"
 import { Pencil, Trash2, X, Check, Loader2 } from "lucide-react"
 
 interface Question {
@@ -26,6 +28,7 @@ export function TestQuestions() {
   const [newAnswer, setNewAnswer] = useState("")
   const [newScore, setNewScore] = useState(10)
   const [saving, setSaving] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null)
 
   // 加载测试题
   useEffect(() => {
@@ -111,30 +114,42 @@ export function TestQuestions() {
   }
 
   const handleDelete = async (id: number) => {
-    if (confirm("确定要删除这个问题吗？")) {
-      try {
-        const response = await fetch('/api/test-cases', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'delete',
-            id
-          }),
-        })
+    setShowDeleteConfirm(id)
+  }
 
-        if (response.ok) {
-          const data = await response.json()
-          setQuestions(data.data.checks)
-        } else {
-          alert('删除失败')
-        }
-      } catch (error) {
-        console.error('Error deleting:', error)
+  const confirmDelete = async () => {
+    if (showDeleteConfirm === null) return
+
+    setSaving(true)
+    try {
+      const response = await fetch('/api/test-cases', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'delete',
+          id: showDeleteConfirm
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setQuestions(data.data.checks)
+        setShowDeleteConfirm(null)
+      } else {
         alert('删除失败')
       }
+    } catch (error) {
+      console.error('Error deleting:', error)
+      alert('删除失败')
+    } finally {
+      setSaving(false)
     }
+  }
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(null)
   }
 
   const handleAddQuestion = async () => {
@@ -376,6 +391,36 @@ export function TestQuestions() {
           </div>
         )}
       </div>
+
+      {/* 删除确认对话框 */}
+      <Dialog open={showDeleteConfirm !== null} onOpenChange={cancelDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              确认删除
+            </DialogTitle>
+            <DialogDescription>
+              确定要删除这个问题吗？此操作不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDelete}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  删除中...
+                </>
+              ) : (
+                "删除"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
