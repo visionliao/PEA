@@ -122,6 +122,11 @@ interface AppState {
   // 运行结果状态
   runResultsConfig: {
     runStatus: RunStatus
+    testLoopEnabled: boolean
+    testLoopCount: number
+    scoreThresholdEnabled: boolean
+    scoreThreshold: number
+    totalTestScore: number
   }
   
   // Actions
@@ -179,6 +184,11 @@ interface AppState {
   stopRun: () => void
   setRunResults: (results: any[]) => void
   setRunError: (error: string) => void
+  setTestLoopEnabled: (enabled: boolean) => void
+  setTestLoopCount: (count: number) => void
+  setScoreThresholdEnabled: (enabled: boolean) => void
+  setScoreThreshold: (threshold: number) => void
+  setTotalTestScore: (score: number) => void
 }
 
 // 默认模型参数
@@ -253,7 +263,12 @@ export const useAppStore = create<AppState>()(
       runResultsConfig: {
         runStatus: {
           isRunning: false
-        }
+        },
+        testLoopEnabled: true,
+        testLoopCount: 10,
+        scoreThresholdEnabled: false,
+        scoreThreshold: 50,
+        totalTestScore: 0
       },
       
       // UI Actions
@@ -413,6 +428,21 @@ export const useAppStore = create<AppState>()(
         get().updateRunResultsConfig({ 
           runStatus: { ...get().runResultsConfig.runStatus, error, isRunning: false } 
         }),
+
+      setTestLoopEnabled: (enabled) =>
+        get().updateRunResultsConfig({ testLoopEnabled: enabled }),
+
+      setTestLoopCount: (count) =>
+        get().updateRunResultsConfig({ testLoopCount: count }),
+
+      setScoreThresholdEnabled: (enabled) =>
+        get().updateRunResultsConfig({ scoreThresholdEnabled: enabled }),
+
+      setScoreThreshold: (threshold) =>
+        get().updateRunResultsConfig({ scoreThreshold: threshold }),
+
+      setTotalTestScore: (score) =>
+        get().updateRunResultsConfig({ totalTestScore: score })
     }),
     {
       name: 'pea-app-storage',

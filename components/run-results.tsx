@@ -2,15 +2,25 @@
 
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { Slider } from "@/components/ui/slider"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAppStore } from "@/store/app-store"
 import { useState, useEffect } from "react"
+import { ChevronDown, ChevronRight } from "lucide-react"
 
 export function RunResults() {
   const [testCasesCount, setTestCasesCount] = useState(0)
 
   const {
     runResultsConfig: {
-      runStatus
+      runStatus,
+      testLoopEnabled,
+      testLoopCount,
+      scoreThresholdEnabled,
+      scoreThreshold,
+      totalTestScore
     },
     projectConfig,
     promptFrameworkConfig,
@@ -18,7 +28,12 @@ export function RunResults() {
     startRun,
     stopRun,
     setRunResults,
-    setRunError
+    setRunError,
+    setTestLoopEnabled,
+    setTestLoopCount,
+    setScoreThresholdEnabled,
+    setScoreThreshold,
+    setTotalTestScore
   } = useAppStore()
 
   // 加载测试题集数据
@@ -29,6 +44,15 @@ export function RunResults() {
         if (response.ok) {
           const data = await response.json()
           setTestCasesCount(data.checks.length)
+
+          // 计算总分
+          const totalScore = data.checks.reduce((sum: number, question: any) => sum + (question.score || 0), 0)
+          setTotalTestScore(totalScore)
+
+          // 如果启用了评分阈值且当前阈值大于总分，则调整阈值
+          if (scoreThresholdEnabled && scoreThreshold > totalScore) {
+            setScoreThreshold(totalScore)
+          }
         }
       } catch (error) {
         console.error("Failed to load test cases:", error)
@@ -36,7 +60,23 @@ export function RunResults() {
     }
 
     loadTestCases()
-  }, [])
+  }, [scoreThresholdEnabled, scoreThreshold, setScoreThreshold, setTotalTestScore])
+
+  // 处理测试循环开关
+  const handleTestLoopToggle = (enabled: boolean) => {
+    setTestLoopEnabled(enabled)
+    if (enabled && scoreThresholdEnabled) {
+      setScoreThresholdEnabled(false)
+    }
+  }
+
+  // 处理评分阈值开关
+  const handleScoreThresholdToggle = (enabled: boolean) => {
+    setScoreThresholdEnabled(enabled)
+    if (enabled && testLoopEnabled) {
+      setTestLoopEnabled(false)
+    }
+  }
 
   const handleRun = async () => {
     console.log("=== 开始运行提示词工程任务 ===")
@@ -59,6 +99,12 @@ export function RunResults() {
         prompt: modelSettingsConfig.promptModelParams,
         work: modelSettingsConfig.workModelParams,
         score: modelSettingsConfig.scoreModelParams
+      },
+      testConfig: {
+        mode: testLoopEnabled ? 'loop' : 'threshold',
+        loopCount: testLoopCount,
+        scoreThreshold: scoreThreshold,
+        totalTestScore: totalTestScore
       }
     }
 
@@ -169,22 +215,121 @@ export function RunResults() {
                 测试题: {testCasesCount} 个
               </div>
               <div className="text-muted-foreground">
-                状态: {testCasesCount > 0 ? "已配置" : "未配置"}
+                总分: {totalTestScore} 分
               </div>
               <div className="text-muted-foreground">
-                准备度: {testCasesCount > 0 ? "就绪" : "需添加"}
+                状态: {testCasesCount > 0 ? "已配置" : "未配置"}
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Test Configuration */}
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <Label className="text-sm font-medium text-foreground">启用循环测试</Label>
+                <Switch
+                  checked={testLoopEnabled}
+                  onCheckedChange={handleTestLoopToggle}
+                />
+              </div>
+
+              {testLoopEnabled && (
+                <div className="space-y-3">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm font-medium text-foreground">测试循环次数</Label>
+                        <span className="text-xs text-muted-foreground">loop_count</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        设置测试循环的次数，范围1-100次
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Slider
+                        value={[testLoopCount]}
+                        onValueChange={(value) => setTestLoopCount(value[0])}
+                        max={100}
+                        min={1}
+                        step={1}
+                        className="w-48 md:w-64"
+                      />
+                      <Input
+                        type="number"
+                        value={testLoopCount}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value)
+                          if (value >= 1 && value <= 100) {
+                            setTestLoopCount(value)
+                          }
+                        }}
+                        className="w-20 h-8 text-center text-sm"
+                        min={1}
+                        max={100}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <Label className="text-sm font-medium text-foreground">启用评分阈值</Label>
+                <Switch
+                  checked={scoreThresholdEnabled}
+                  onCheckedChange={handleScoreThresholdToggle}
+                />
+              </div>
+
+              {scoreThresholdEnabled && (
+                <div className="space-y-3">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm font-medium text-foreground">评分阈值</Label>
+                        <span className="text-xs text-muted-foreground">score_threshold</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        设置停止测试的总得分阈值，范围10-{totalTestScore}分
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Slider
+                        value={[scoreThreshold]}
+                        onValueChange={(value) => setScoreThreshold(value[0])}
+                        max={totalTestScore}
+                        min={10}
+                        step={1}
+                        className="w-48 md:w-64"
+                      />
+                      <Input
+                        type="number"
+                        value={scoreThreshold}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value)
+                          if (value >= 10 && value <= totalTestScore) {
+                            setScoreThreshold(value)
+                          }
+                        }}
+                        className="w-20 h-8 text-center text-sm"
+                        min={10}
+                        max={totalTestScore}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Run section */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-base font-medium text-foreground">运行配置</Label>
-              <p className="text-sm text-muted-foreground mt-1">配置并执行提示词工程任务</p>
-            </div>
+          <div className="flex justify-end">
             <Button
               onClick={handleRun}
               disabled={runStatus?.isRunning}
@@ -208,10 +353,10 @@ export function RunResults() {
         </div>
 
         {/* Results section */}
-        <div className="space-y-4 pt-6 border-t border-border">
+        <div className="space-y-4">
           <div>
             <Label className="text-base font-medium text-foreground">运行结果</Label>
-            <p className="text-sm text-muted-foreground mt-1">查看最近的运行结果和输出</p>
+            <p className="text-sm text-muted-foreground mt-1">当前正在运行的详细情况</p>
           </div>
 
           {runStatus?.error && (
