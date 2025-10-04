@@ -17,6 +17,7 @@ export function RunResults() {
   const [currentTask, setCurrentTask] = useState(0)
   const [totalTasks, setTotalTasks] = useState(100)
   const [progress, setProgress] = useState(0)
+  const [isExecuting, setIsExecuting] = useState(false)
 
   const {
     runResultsConfig: {
@@ -171,6 +172,7 @@ export function RunResults() {
   // 处理停止运行
   const handleStopClick = () => {
     stopRun()
+    setIsExecuting(false)
     setCurrentTask(0)
     setProgress(0)
     setTotalTasks(100)
@@ -178,6 +180,12 @@ export function RunResults() {
 
   const handleRun = async () => {
     console.log("=== 开始运行提示词工程任务 ===")
+
+    // 防止重复执行
+    if (isExecuting) {
+      console.log("任务正在执行中，忽略重复请求")
+      return
+    }
 
     // 获取当前配置
     const config = {
@@ -213,6 +221,7 @@ export function RunResults() {
     setTotalTasks(calculatedTotalTasks)
     setCurrentTask(0)
     setProgress(0)
+    setIsExecuting(true)
 
     // 开始运行
     startRun()
@@ -289,12 +298,14 @@ export function RunResults() {
 
       setRunResults(results)
       stopRun()
+      setIsExecuting(false)
 
       console.log("=== 任务运行完成 ===")
 
     } catch (error) {
       console.error("任务运行失败：", error)
       setRunError(error instanceof Error ? error.message : "未知错误")
+      setIsExecuting(false)
     }
   }
 
