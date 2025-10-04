@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar"
 import { ModelSettings } from "@/components/model-settings"
 import { ProjectOverview } from "@/components/project-overview"
 import { PromptFramework } from "@/components/prompt-framework"
+import { TestQuestions } from "@/components/test-questions"
 import { RunResults } from "@/components/run-results"
 import { UserManual } from "@/components/user-manual"
 import { useAppStore } from "@/store/app-store"
@@ -46,6 +47,7 @@ export function SettingsLayout() {
         {activeSection === "project-overview" && <ProjectOverview />}
         {activeSection === "prompt-framework" && <PromptFramework />}
         {activeSection === "model-settings" && <ModelSettings />}
+        {activeSection === "test-questions" && <TestQuestions />}
         {activeSection === "run-results" && <RunResults />}
         {activeSection === "user-manual" && <UserManual />}
         {/* Other sections can be added here */}

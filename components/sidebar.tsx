@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { FileText, Lightbulb, Settings, Play, BookOpen, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { FileText, Lightbulb, Settings, Play, BookOpen, PanelLeftClose, PanelLeftOpen, ListChecks } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
@@ -27,6 +27,11 @@ const menuItems = [
     id: "model-settings",
     label: "模型设置",
     icon: Settings,
+  },
+  {
+    id: "test-questions",
+    label: "测试题集",
+    icon: ListChecks,
   },
   {
     id: "run-results",
