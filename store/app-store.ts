@@ -55,7 +55,6 @@ interface RunStatus {
   isRunning: boolean
   startTime?: Date
   endTime?: Date
-  results?: any[]
   error?: string
 }
 
@@ -127,6 +126,13 @@ interface AppState {
     scoreThresholdEnabled: boolean
     scoreThreshold: number
     totalTestScore: number
+    // 用于跟踪进度的状态
+    currentTask: number
+    totalTasks: number
+    progress: number
+    isExecuting: boolean
+    isCancelled: boolean
+    activeTaskMessage: string
   }
   
   // Actions
@@ -182,13 +188,19 @@ interface AppState {
   setRunStatus: (status: RunStatus) => void
   startRun: () => void
   stopRun: () => void
-  setRunResults: (results: any[]) => void
   setRunError: (error: string) => void
   setTestLoopEnabled: (enabled: boolean) => void
   setTestLoopCount: (count: number) => void
   setScoreThresholdEnabled: (enabled: boolean) => void
   setScoreThreshold: (threshold: number) => void
   setTotalTestScore: (score: number) => void
+  // 用于更新进度的 Actions
+  setCurrentTask: (task: number) => void
+  setTotalTasks: (tasks: number) => void
+  setProgress: (progress: number) => void
+  setIsExecuting: (executing: boolean) => void
+  setIsCancelled: (cancelled: boolean) => void
+  setActiveTaskMessage: (message: string) => void
 }
 
 // 默认模型参数
@@ -268,7 +280,13 @@ export const useAppStore = create<AppState>()(
         testLoopCount: 10,
         scoreThresholdEnabled: false,
         scoreThreshold: 50,
-        totalTestScore: 0
+        totalTestScore: 0,
+        currentTask: 0,
+        totalTasks: 0,
+        progress: 0,
+        isExecuting: false,
+        isCancelled: false,
+        activeTaskMessage: ""
       },
       
       // UI Actions
@@ -404,24 +422,21 @@ export const useAppStore = create<AppState>()(
       setRunStatus: (status) => 
         get().updateRunResultsConfig({ runStatus: status }),
       
-      startRun: () => 
-        get().setRunStatus({ 
-          isRunning: true, 
-          startTime: new Date(), 
-          endTime: undefined, 
-          results: [], 
+      startRun: () =>
+        get().setRunStatus({
+          isRunning: true,
+          startTime: new Date(),
+          endTime: undefined,
           error: undefined 
         }),
-      
-      stopRun: () => 
-        get().setRunStatus({ 
-          isRunning: false, 
-          endTime: new Date() 
-        }),
-      
-      setRunResults: (results) => 
-        get().updateRunResultsConfig({ 
-          runStatus: { ...get().runResultsConfig.runStatus, results } 
+
+      stopRun: () =>
+        get().updateRunResultsConfig({
+          runStatus: {
+            ...get().runResultsConfig.runStatus, // 保留 results, startTime 等
+            isRunning: false,
+            endTime: new Date()
+          }
         }),
       
       setRunError: (error) => 
@@ -442,7 +457,26 @@ export const useAppStore = create<AppState>()(
         get().updateRunResultsConfig({ scoreThreshold: threshold }),
 
       setTotalTestScore: (score) =>
-        get().updateRunResultsConfig({ totalTestScore: score })
+        get().updateRunResultsConfig({ totalTestScore: score }),
+
+      // 添加新的 Actions 实现
+      setCurrentTask: (task) =>
+        get().updateRunResultsConfig({ currentTask: task }),
+
+      setTotalTasks: (tasks) =>
+        get().updateRunResultsConfig({ totalTasks: tasks }),
+
+      setProgress: (progress) =>
+        get().updateRunResultsConfig({ progress }),
+
+      setIsExecuting: (executing) =>
+        get().updateRunResultsConfig({ isExecuting: executing }),
+
+      setIsCancelled: (cancelled) =>
+        get().updateRunResultsConfig({ isCancelled: cancelled }),
+
+      setActiveTaskMessage: (message) =>
+        get().updateRunResultsConfig({ activeTaskMessage: message })
     }),
     {
       name: 'pea-app-storage',
@@ -466,6 +500,13 @@ export const useAppStore = create<AppState>()(
           promptModelParams: state.modelSettingsConfig.promptModelParams,
           workModelParams: state.modelSettingsConfig.workModelParams,
           scoreModelParams: state.modelSettingsConfig.scoreModelParams,
+        },
+        runResultsConfig: {
+          testLoopEnabled: state.runResultsConfig.testLoopEnabled,
+          testLoopCount: state.runResultsConfig.testLoopCount,
+          scoreThresholdEnabled: state.runResultsConfig.scoreThresholdEnabled,
+          scoreThreshold: state.runResultsConfig.scoreThreshold,
+          totalTestScore: state.runResultsConfig.totalTestScore
         },
       }),
     }

@@ -8,17 +8,12 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useAppStore } from "@/store/app-store"
 import { useState, useEffect, useRef } from "react"
-import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react"
+import { AlertTriangle, Cog } from "lucide-react"
 
 export function RunResults() {
   const [testCasesCount, setTestCasesCount] = useState(0)
   const [showValidationDialog, setShowValidationDialog] = useState(false)
   const [validationMessage, setValidationMessage] = useState("")
-  const [currentTask, setCurrentTask] = useState(0)
-  const [totalTasks, setTotalTasks] = useState(0)
-  const [progress, setProgress] = useState(0)
-  const [isExecuting, setIsExecuting] = useState(false)
-  const [isCancelled, setIsCancelled] = useState(false)
   const cancelledRef = useRef(false)
 
   const {
@@ -28,21 +23,39 @@ export function RunResults() {
       testLoopCount,
       scoreThresholdEnabled,
       scoreThreshold,
-      totalTestScore
+      totalTestScore,
+      // 解构出新的进度状态
+      currentTask,
+      totalTasks,
+      progress,
+      isExecuting,
+      isCancelled,
+      activeTaskMessage
     },
     projectConfig,
     promptFrameworkConfig,
     modelSettingsConfig,
     startRun,
     stopRun,
-    setRunResults,
     setRunError,
+    setActiveTaskMessage,
     setTestLoopEnabled,
     setTestLoopCount,
     setScoreThresholdEnabled,
     setScoreThreshold,
-    setTotalTestScore
+    setTotalTestScore,
+    // 解构出新的 actions
+    setCurrentTask,
+    setTotalTasks,
+    setProgress,
+    setIsExecuting,
+    setIsCancelled
   } = useAppStore()
+
+  // 这个 useEffect 确保 ref 与 Zustand 状态同步
+  useEffect(() => {
+    cancelledRef.current = isCancelled
+  }, [isCancelled])
 
   // 加载测试题集数据
   useEffect(() => {
@@ -108,31 +121,26 @@ export function RunResults() {
 
   // 更新任务进度
   const updateTaskProgress = (taskIncrement: number = 1) => {
-    setCurrentTask(prev => {
-      const newTask = prev + taskIncrement
-      let currentTotalTasks = totalTasks
+    // 使用函数式更新来避免闭包问题
+    const storeState = useAppStore.getState()
+    const prevTask = storeState.runResultsConfig.currentTask
+    const newTask = prevTask + taskIncrement
+    let currentTotalTasks = storeState.runResultsConfig.totalTasks
 
-      // 如果totalTasks为0，重新计算正确的总数
-      if (currentTotalTasks === 0) {
-        currentTotalTasks = calculateTotalTasks()
-        setTotalTasks(currentTotalTasks)
-      }
+    if (currentTotalTasks === 0) {
+      currentTotalTasks = calculateTotalTasks()
+      setTotalTasks(currentTotalTasks)
+    }
 
-      // 评分阈值模式下动态扩展总任务数
-      if (!testLoopEnabled && newTask >= currentTotalTasks) {
-        currentTotalTasks = newTask + 100
-        setTotalTasks(currentTotalTasks)
-      }
+    if (!testLoopEnabled && newTask >= currentTotalTasks) {
+      currentTotalTasks = newTask + 100
+      setTotalTasks(currentTotalTasks)
+    }
 
-      // 计算进度百分比
-      const newProgress = (newTask / currentTotalTasks) * 100
-      setProgress(Math.min(newProgress, 100))
-
-      // 调试信息
-      // console.log(`进度更新: ${newTask}/${currentTotalTasks} = ${newProgress}% (模式: ${testLoopEnabled ? '循环' : '评分阈值'})`)
-
-      return newTask
-    })
+    const newProgress = (newTask / currentTotalTasks) * 100
+    setProgress(Math.min(newProgress, 100))
+    setCurrentTask(newTask)
+    console.log(`进度更新: ${newTask}/${currentTotalTasks} = ${newProgress}% (模式: ${testLoopEnabled ? '循环' : '评分阈值'})`)
   }
 
   // 验证运行条件
@@ -183,11 +191,6 @@ export function RunResults() {
   // 处理停止运行
   const handleStopClick = () => {
     setIsCancelled(true)
-    cancelledRef.current = true
-    stopRun()
-    setIsExecuting(false)
-    setCurrentTask(0)
-    setProgress(0)
   }
 
   const handleRun = async () => {
@@ -199,168 +202,114 @@ export function RunResults() {
       return
     }
 
-    // 获取当前配置
-    const config = {
-      project: {
-        name: projectConfig.projectName,
-        background: projectConfig.projectBackground,
-        knowledgeBaseFiles: projectConfig.knowledgeBaseFiles,
-        mcpTools: projectConfig.mcpTools
-      },
-      promptFrameworks: Array.from(promptFrameworkConfig.selectedFrameworks instanceof Set ? promptFrameworkConfig.selectedFrameworks : new Set()),
-      models: {
-        prompt: modelSettingsConfig.promptModel,
-        work: modelSettingsConfig.workModel,
-        score: modelSettingsConfig.scoreModel
-      },
-      modelParams: {
-        prompt: modelSettingsConfig.promptModelParams,
-        work: modelSettingsConfig.workModelParams,
-        score: modelSettingsConfig.scoreModelParams
-      },
-      testConfig: {
-        mode: testLoopEnabled ? 'loop' : 'threshold',
-        loopCount: testLoopCount,
-        scoreThreshold: scoreThreshold,
-        totalTestScore: totalTestScore
-      }
-    }
+    // --- 1. 状态初始化 ---
+    const calculatedTotalTasks = calculateTotalTasks();
+    console.log(`计算的总任务数: ${calculatedTotalTasks}`);
 
-    console.log("当前配置：", JSON.stringify(config, null, 2))
-
-    // 重置进度状态
-    const calculatedTotalTasks = calculateTotalTasks()
-    console.log(`计算的总任务数: ${calculatedTotalTasks}`)
-
-    // 重置取消标志
-    setIsCancelled(false)
-    cancelledRef.current = false
-
-    // 使用 Promise 确保 states 按顺序更新
-    await new Promise(resolve => {
-      setTotalTasks(calculatedTotalTasks)
-      setCurrentTask(0)
-      setProgress(0)
-      setIsExecuting(true)
-      resolve(null)
-    })
-
-    // 再次验证 totalTasks 是否正确设置
-    console.log(`任务开始 - totalTasks 应该是 ${calculatedTotalTasks}`)
-
-    // 开始运行
-    startRun()
+    setIsCancelled(false);
+    setTotalTasks(calculatedTotalTasks);
+    setCurrentTask(0);
+    setProgress(0);
+    setIsExecuting(true);
+    startRun();
+    setActiveTaskMessage("任务初始化...");
 
     try {
-      // 模拟任务执行流程
-      const selectedFrameworksCount = promptFrameworkConfig.selectedFrameworks instanceof Set ? promptFrameworkConfig.selectedFrameworks.size : 0
-      const actualLoopCount = testLoopEnabled ? testLoopCount : 10
-
-      // 按 (框架数 + (框架数×问题数) + (框架数×问题数)) × 循环次数 的顺序执行
-      // 1. 生成提示词框架任务 (每个框架在每个循环中执行一次)
-      for (let k = 0; k < actualLoopCount; k++) {
-        // 检查是否取消
-        if (cancelledRef.current) {
-          console.log("任务被取消，停止执行")
-          break
+      // --- 2. 获取配置 ---
+      const config = {
+        project: {
+          name: projectConfig.projectName,
+          background: projectConfig.projectBackground,
+          knowledgeBaseFiles: projectConfig.knowledgeBaseFiles,
+          // 修正: 使用 projectConfig.mcpTools
+          mcpTools: projectConfig.mcpTools
+        },
+        promptFrameworks: Array.from(promptFrameworkConfig.selectedFrameworks instanceof Set ? promptFrameworkConfig.selectedFrameworks : new Set()),
+        models: {
+          prompt: modelSettingsConfig.promptModel,
+          work: modelSettingsConfig.workModel,
+          score: modelSettingsConfig.scoreModel
+        },
+        modelParams: {
+          prompt: modelSettingsConfig.promptModelParams,
+          work: modelSettingsConfig.workModelParams,
+          score: modelSettingsConfig.scoreModelParams
+        },
+        testConfig: {
+          mode: testLoopEnabled ? 'loop' : 'threshold',
+          loopCount: testLoopCount,
+          scoreThreshold: scoreThreshold,
+          totalTestScore: totalTestScore
         }
+      };
+      console.log("当前配置：", JSON.stringify(config, null, 2));
 
-        for (let i = 0; i < selectedFrameworksCount; i++) {
-          if (cancelledRef.current) break
-          await new Promise(resolve => setTimeout(resolve, 50))
-          updateTaskProgress(1)
-        }
-      }
+      // --- 3. 模拟执行异步任务 ---
+      const selectedFrameworksCount = promptFrameworkConfig.selectedFrameworks instanceof Set ? promptFrameworkConfig.selectedFrameworks.size : 0;
+      const actualLoopCount = testLoopEnabled ? testLoopCount : 10;
 
-      // 2. 工作模型运行任务 (每个框架的每个问题在每个循环中执行一次)
-      for (let k = 0; k < actualLoopCount; k++) {
-        if (cancelledRef.current) {
-          console.log("任务被取消，停止执行")
-          break
-        }
+      const taskStages = [
+        { name: "生成提示词框架任务", loops: actualLoopCount, innerLoops: selectedFrameworksCount, subLoops: 1, delay: 50 },
+        { name: "工作模型运行任务", loops: actualLoopCount, innerLoops: selectedFrameworksCount, subLoops: testCasesCount, delay: 30 },
+        { name: "评分模型任务", loops: actualLoopCount, innerLoops: selectedFrameworksCount, subLoops: testCasesCount, delay: 20 }
+      ];
 
-        for (let i = 0; i < selectedFrameworksCount; i++) {
-          if (cancelledRef.current) break
+      for (const stage of taskStages) {
+        for (let k = 0; k < stage.loops; k++) {
+          for (let i = 0; i < stage.innerLoops; i++) {
+            for (let j = 0; j < stage.subLoops; j++) {
+              if (useAppStore.getState().runResultsConfig.isCancelled) {
+                console.log(`任务在阶段 "${stage.name}" 中被取消`);
+                throw new Error("CancelledByUser");
+              }
 
-          for (let j = 0; j < testCasesCount; j++) {
-            if (cancelledRef.current) break
+              const currentTaskNumber = useAppStore.getState().runResultsConfig.currentTask + 1;
+              setActiveTaskMessage(`正在执行 (${currentTaskNumber}/${calculatedTotalTasks}): ${stage.name}`);
+              await new Promise(resolve => setTimeout(resolve, stage.delay));
 
-            await new Promise(resolve => setTimeout(resolve, 30))
-            updateTaskProgress(1)
+              // 更新进度条
+              updateTaskProgress(1);
 
-            // 模拟评分阈值提前停止
-            if (!testLoopEnabled && Math.random() > 0.95) {
-              console.log("达到评分阈值，提前停止测试")
-              break
+              if (stage.name === "工作模型运行任务" && !testLoopEnabled && Math.random() > 0.95) {
+                console.log("达到评分阈值，提前停止测试");
+                throw new Error("ThresholdReached");
+              }
             }
           }
         }
       }
 
-      // 3. 评分模型任务 (每个框架的每个问题在每个循环中执行一次)
-      for (let k = 0; k < actualLoopCount; k++) {
-        if (cancelledRef.current) {
-          console.log("任务被取消，停止执行")
-          break
-        }
+      // --- 4. 任务正常完成后的处理 ---
+      console.log("所有任务阶段正常完成，设置最终结果。");
+      setActiveTaskMessage("所有测试任务已成功完成。");
 
-        for (let i = 0; i < selectedFrameworksCount; i++) {
-          if (cancelledRef.current) break
-
-          for (let j = 0; j < testCasesCount; j++) {
-            if (cancelledRef.current) break
-
-            await new Promise(resolve => setTimeout(resolve, 20))
-            updateTaskProgress(1)
-          }
-        }
+    } catch (error: any) {
+      // --- 5. 错误处理 ---
+      if (error.message === "CancelledByUser") {
+        setActiveTaskMessage("任务已被用户手动取消。");
+        console.log("任务被用户手动取消。");
+      } else if (error.message === "ThresholdReached") {
+        setActiveTaskMessage("任务因达到评分阈值而停止。");
+        console.log("任务因达到评分阈值而停止。");
+      } else {
+        setActiveTaskMessage("任务因发生错误而停止。");
+        console.error("任务运行失败：", error);
+        setRunError(error.message || "未知错误");
       }
+    } finally {
+      // --- 6. 清理工作 (无论成功、失败还是取消，这里都会执行) ---
+      const finalState = useAppStore.getState().runResultsConfig;
+      console.log(`=== 任务${finalState.isCancelled ? '被取消' : '运行结束'} ===`);
 
-      // 模拟结果
-      const results = [
-        {
-          id: 1,
-          type: "project_analysis",
-          message: "项目分析完成",
-          data: {
-            projectName: config.project.name,
-            frameworkCount: config.promptFrameworks.length,
-            modelCount: Object.keys(config.models).length
-          }
-        },
-        {
-          id: 2,
-          type: "framework_processing",
-          message: "提示词框架处理完成",
-          data: {
-            frameworks: config.promptFrameworks
-          }
-        },
-        {
-          id: 3,
-          type: "model_validation",
-          message: "模型配置验证完成",
-          data: {
-            models: config.models
-          }
-        }
-      ]
+      stopRun();
+      setIsExecuting(false);
 
-      // 只有在没有被取消的情况下才设置结果
-      if (!cancelledRef.current) {
-        setRunResults(results)
+      if (finalState.isCancelled) {
+        setCurrentTask(0);
+        setProgress(0);
       }
-      stopRun()
-      setIsExecuting(false)
-
-      console.log(`=== 任务${cancelledRef.current ? '被取消' : '运行完成'} ===`)
-
-    } catch (error) {
-      console.error("任务运行失败：", error)
-      setRunError(error instanceof Error ? error.message : "未知错误")
-      setIsExecuting(false)
     }
-  }
+  };
 
   return (
     <div className="p-4 md:p-8 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto">
@@ -534,7 +483,7 @@ export function RunResults() {
         {/* Run section */}
         <div className="space-y-4">
           <div className="flex items-center justify-end gap-4">
-            {runStatus?.isRunning && (
+            {(runStatus?.isRunning || isExecuting) && (
               <div className="flex items-center gap-3 flex-1">
                 <div className="flex items-center justify-between text-sm text-muted-foreground w-40">
                   <span>任务进度</span>
@@ -549,12 +498,12 @@ export function RunResults() {
               </div>
             )}
             <Button
-              onClick={runStatus?.isRunning ? handleStopClick : handleRunClick}
-              className={runStatus?.isRunning
+              onClick={runStatus?.isRunning || isExecuting ? handleStopClick : handleRunClick}
+              className={runStatus?.isRunning || isExecuting
                 ? "bg-red-500 hover:bg-red-600 text-white flex-shrink-0"
                 : "bg-foreground text-background hover:bg-foreground/90 flex-shrink-0"}
             >
-              {runStatus?.isRunning ? "停止运行" : "开始运行"}
+              {runStatus?.isRunning || isExecuting ? "停止运行" : "开始运行"}
             </Button>
           </div>
         </div>
@@ -573,31 +522,27 @@ export function RunResults() {
             </div>
           )}
 
-          {runStatus?.results && runStatus.results.length > 0 && (
-            <div className="space-y-2">
-              {(runStatus?.results || []).map((result, index) => (
-                <div key={result.id} className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="text-green-800 font-medium text-sm">{result.message}</div>
-                    <div className="text-green-600 text-xs">
-                      {new Date().toLocaleTimeString()}
-                    </div>
-                  </div>
-                  <details className="mt-2">
-                    <summary className="text-xs text-green-700 cursor-pointer hover:text-green-800">查看详情</summary>
-                    <pre className="mt-2 text-xs text-green-700 bg-white p-2 rounded border border-green-200 overflow-x-auto">
-                      {JSON.stringify(result.data, null, 2)}
-                    </pre>
-                  </details>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="p-8 text-center border border-dashed border-border rounded-lg">
-              <div className="text-muted-foreground text-sm">暂无运行结果</div>
-              <div className="text-muted-foreground text-xs mt-1">点击“开始运行”执行任务</div>
-            </div>
+          <div className="p-4 border border-border rounded-lg min-h-[150px] flex items-center justify-center">
+            {isExecuting ? (
+              // 正在运行时，显示带动画的状态消息
+              <div className="flex items-center gap-3 text-blue-600">
+                <Cog className="w-5 h-5 animate-spin" />
+                <span className="text-sm font-medium">{activeTaskMessage}</span>
+              </div>
+            ) : runStatus?.error ? (
+              // 运行出错时
+              <div className="text-sm font-medium text-red-600">{activeTaskMessage}</div>
+            ) : activeTaskMessage ? (
+              // 正常结束或取消时
+              <div className="text-sm font-medium text-green-600">{activeTaskMessage}</div>
+            ) : (
+              // 初始状态时
+              <div className="text-center">
+                <div className="text-muted-foreground text-sm">暂无运行结果</div>
+                <div className="text-muted-foreground text-xs mt-1">点击“开始运行”执行任务</div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
