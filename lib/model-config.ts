@@ -149,7 +149,7 @@ export class ModelConfigManager {
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       organization: config.organization,
-      timeout: config.timeout || 30000,
+      timeout: config.timeout || 90000, // 超时时间为1分30秒
       retries: config.retries || 3,
       headers: config.headers,
       proxy: config.proxy

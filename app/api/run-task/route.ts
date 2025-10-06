@@ -5,6 +5,51 @@ import { modelService } from '@/lib/model-service'
 import { createMessage, createMessages } from '@/lib/type-utils'
 import { LLMMessage } from '@/types/llm'
 
+// 安全调用大模型包装器，可以重试
+interface SafeCallResult {
+  success: boolean;
+  content?: string;
+  error?: string;
+}
+
+async function safeModelCall(
+  modelId: string,
+  messages: LLMMessage[],
+  retries = 2 // 默认重试2次
+): Promise<SafeCallResult> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      if (i > 0) {
+        console.log(`[safeModelCall] Retrying... (Attempt ${i + 1})`);
+        // 在重试前可以增加一个短暂的延迟
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      const result = await modelService.call({
+        modelId: modelId,
+        request: { messages: messages }
+      });
+
+      if (result.success && result.response) {
+        return { success: true, content: result.response.content };
+      } else {
+        // 记录非致命错误，但继续循环以重试
+        console.error(`[safeModelCall] Attempt ${i + 1} failed:`, result.error?.message);
+        if (i === retries) { // 如果这是最后一次重试
+          return { success: false, error: result.error?.message || "Model call failed after retries" };
+        }
+      }
+    } catch (error: any) {
+      console.error(`[safeModelCall] Attempt ${i + 1} caught a critical error:`, error);
+      if (i === retries) { // 如果这是最后一次重试
+        return { success: false, error: error.message || "A critical error occurred during model call" };
+      }
+    }
+  }
+  // 理论上不会执行到这里，但在 TS 中为了类型安全返回一个默认失败结果
+  return { success: false, error: "Exited retry loop unexpectedly" };
+}
+
 // Helper to format date for directory name (YYMMDD_HHMMSS)
 function getTimestamp() {
   const now = new Date()
@@ -134,11 +179,19 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         你的任务是结合项目背景和框架定义，输出一个可以直接用于指导工作模型的系统提示词。只输出提示词内容，不要包含任何额外的解释或标题。`
       );
 
-      const promptResult = await modelService.call({ modelId: config.models.prompt, request: { messages: promptGenMessages } });
+      const promptResult = await safeModelCall(config.models.prompt, promptGenMessages);
       currentTask++;
 
-      if (!promptResult.success || !promptResult.response) throw new Error(`为框架 [${framework.name}] 生成提示词失败: ${promptResult.error?.message}`)
-      const systemPrompt = promptResult.response.content
+      // 如果生成系统提示词失败，跳过这个框架
+      if (!promptResult.success) {
+        console.error(`FATAL: Failed to generate system prompt for framework [${framework.name}]. Skipping this framework. Error: ${promptResult.error}`);
+        onProgress({ type: 'log', message: `错误: 无法为框架 [${framework.name}] 生成系统提示词，已跳过。` });
+        // 将这个框架下剩余的任务数从总数中扣除，以保证进度条准确性
+        const tasksToSkip = 1 + config.testCases.length * 2;
+        currentTask += (tasksToSkip - 1); // 已经加过1了，所以-1
+        continue; // 直接进入下一个 for 循环（下一个框架）
+      }
+      const systemPrompt = promptResult.content!
       await writeFile(join(frameworkDir, `${framework.name}.md`), systemPrompt, 'utf-8')
 
       onProgress({ 
@@ -155,48 +208,55 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
       // 步骤 5: 循环处理所有问题
       for (const testCase of config.testCases) {
         // 步骤 3: 工作模型回答问题
+        let score = 0;
+        let modelAnswer = "N/A (调用失败)";
         currentTask++;
         onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在回答问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } })
 
         const workMessages: LLMMessage[] = [createMessage.system(systemPrompt), createMessage.user(testCase.question)];
-        const workResult = await modelService.call({ modelId: config.models.work, request: { messages: workMessages } });
-        if (!workResult.success || !workResult.response) throw new Error(`工作模型回答问题 ${testCase.id} 失败: ${workResult.error?.message}`);
-        const modelAnswer = workResult.response.content;
+        const workResult = await safeModelCall(config.models.work, workMessages);
+        if (workResult.success) {
+          modelAnswer = workResult.content!;
+        } else {
+          onProgress({ type: 'log', message: `警告: 回答问题 #${testCase.id} 失败，已跳过评分。` });
+        }
 
-        onProgress({ type: 'state_update', payload: { questionId: testCase.id, questionText: testCase.question, modelAnswer: modelAnswer, score: undefined, maxScore: undefined } });
+        onProgress({ type: 'state_update', payload: { questionId: testCase.id, questionText: testCase.question, modelAnswer, score: undefined, maxScore: undefined } });
 
-        // 步骤 4: 评分模型进行评分
+        // 步骤 4: 评分模型进行评分（如果回答成功，才进行评分）
         currentTask++;
-        onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在评估问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } });
+        if (workResult.success) {
+          onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在评估问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } });
+          const scoreMessages = createMessages.simple(
+            `你是一个严格的评分专家。请根据以下问题、标准答案和模型的回答，进行评分。
+            评分标准：满分 ${testCase.score} 分。请只返回一个阿拉伯数字作为分数，不要包含任何其他文字、符号或解释。
 
-        const scoreMessages = createMessages.simple(
-          `你是一个严格的评分专家。请根据以下问题、标准答案和模型的回答，进行评分。
-          评分标准：满分 ${testCase.score} 分。请只返回一个阿拉伯数字作为分数，不要包含任何其他文字、符号或解释。
+            ---
+            **问题:**
+            ${testCase.question}
 
-          ---
-          **问题:**
-          ${testCase.question}
+            ---
+            **标准答案:**
+            ${testCase.answer}
 
-          ---
-          **标准答案:**
-          ${testCase.answer}
+            ---
+            **模型的回答:**
+            ${modelAnswer}`
+            );
+          const scoreResult = await safeModelCall(config.models.score, scoreMessages);
 
-          ---
-          **模型的回答:**
-          ${modelAnswer}`
-        );
-
-        const scoreResult = await modelService.call({ modelId: config.models.score, request: { messages: scoreMessages } });
-        if (!scoreResult.success || !scoreResult.response) throw new Error(`评分模型评估问题 ${testCase.id} 失败: ${scoreResult.error?.message}`);
-        const score = parseInt(scoreResult.response.content.trim().match(/\d+/)?.[0] || '0', 10);
-
+          if (scoreResult.success) {
+            score = parseInt(scoreResult.content!.trim().match(/\d+/)?.[0] || '0', 10);
+          } else {
+             onProgress({ type: 'log', message: `警告: 评估问题 #${testCase.id} 失败。` });
+          }
+        }
         onProgress({ type: 'state_update', payload: { score: score, maxScore: testCase.score } });
 
-        const resultEntry = { id: testCase.id, question: testCase.question, standardAnswer: testCase.answer, modelAnswer: modelAnswer, maxScore: testCase.score, score: score };
+        const resultEntry = { id: testCase.id, question: testCase.question, standardAnswer: testCase.answer, modelAnswer, maxScore: testCase.score, score: score, error: workResult.error };
         qaResults.push(resultEntry);
         await writeFile(join(frameworkDir, 'results.json'), JSON.stringify(qaResults, null, 2), 'utf-8');
-
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
   }
