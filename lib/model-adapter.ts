@@ -114,6 +114,7 @@ export abstract class BaseModelAdapter implements ModelAdapter {
     const timeoutId = setTimeout(() => controller.abort(), timeout)
 
     try {
+      // 全局代理会自动应用到这个 fetch 调用
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
@@ -127,13 +128,23 @@ export abstract class BaseModelAdapter implements ModelAdapter {
       clearTimeout(timeoutId)
       
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        throw new Error(`HTTP ${response.status}: ${error.error?.message || response.statusText}`)
+        let errorBody: any = {};
+        try {
+          errorBody = await response.json();
+        } catch (e) {
+          errorBody = { message: await response.text().catch(() => 'Failed to read response text') };
+        }
+        console.error("API Error Response:", errorBody);
+        const errorMessage = errorBody.error?.message || errorBody.message || response.statusText;
+        throw new Error(`HTTP ${response.status}: ${errorMessage}`);
       }
       
       return response
     } catch (error) {
       clearTimeout(timeoutId)
+      if (error instanceof Error && error.message.includes('fetch failed')) {
+        console.error(`Fetch failed for URL: ${url}. This is often a network/proxy issue.`);
+      }
       throw error
     }
   }

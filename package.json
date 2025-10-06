@@ -1,5 +1,5 @@
 {
-  "name": "my-v0-project",
+  "name": "pea",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -43,8 +43,10 @@
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
+    "dotenv": "^17.2.3",
     "embla-carousel-react": "8.5.1",
     "geist": "^1.3.1",
+    "https-proxy-agent": "^7.0.6",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "next": "14.2.16",
@@ -58,6 +60,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "undici": "^7.16.0",
     "vaul": "^0.9.9",
     "zod": "3.25.67",
     "zustand": "^5.0.8"

@@ -58,6 +58,19 @@ interface RunStatus {
   error?: string
 }
 
+// 当前运行任务状态
+interface CurrentRunState {
+  frameworkName?: string;
+  loop?: number;
+  totalLoops?: number;
+  systemPrompt?: string;
+  questionId?: number;
+  questionText?: string;
+  modelAnswer?: string;
+  score?: number;
+  maxScore?: number;
+}
+
 // 全局状态接口
 interface AppState {
   // UI 状态
@@ -133,6 +146,7 @@ interface AppState {
     isExecuting: boolean
     isCancelled: boolean
     activeTaskMessage: string
+    currentRunState: CurrentRunState
   }
   
   // Actions
@@ -201,6 +215,8 @@ interface AppState {
   setIsExecuting: (executing: boolean) => void
   setIsCancelled: (cancelled: boolean) => void
   setActiveTaskMessage: (message: string) => void
+  updateCurrentRunState: (newState: Partial<CurrentRunState>) => void
+  clearCurrentRunState: () => void
 }
 
 // 默认模型参数
@@ -286,7 +302,8 @@ export const useAppStore = create<AppState>()(
         progress: 0,
         isExecuting: false,
         isCancelled: false,
-        activeTaskMessage: ""
+        activeTaskMessage: "",
+        currentRunState: {}
       },
       
       // UI Actions
@@ -476,7 +493,24 @@ export const useAppStore = create<AppState>()(
         get().updateRunResultsConfig({ isCancelled: cancelled }),
 
       setActiveTaskMessage: (message) =>
-        get().updateRunResultsConfig({ activeTaskMessage: message })
+        get().updateRunResultsConfig({ activeTaskMessage: message }),
+
+      updateCurrentRunState: (newState) =>
+        set((state) => ({
+          runResultsConfig: {
+            ...state.runResultsConfig,
+            // 使用 Object.assign 来合并新旧状态，实现覆盖
+            currentRunState: { ...state.runResultsConfig.currentRunState, ...newState },
+          },
+        })),
+
+      clearCurrentRunState: () =>
+        set((state) => ({
+          runResultsConfig: {
+            ...state.runResultsConfig,
+            currentRunState: {},
+          },
+        })),
     }),
     {
       name: 'pea-app-storage',

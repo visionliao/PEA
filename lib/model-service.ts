@@ -7,6 +7,7 @@ import {
 } from '@/types/llm'
 import { ModelManager } from './model-factory'
 import { ModelConfigManager } from './model-config'
+import { setGlobalDispatcher, ProxyAgent } from 'undici'
 
 // 模型调用选项
 export interface ModelCallOptions {
@@ -39,6 +40,7 @@ export class ModelService {
   private modelManager: ModelManager
   private configManager: ModelConfigManager
   private activeCalls = new Map<string, AbortController>()
+  private static isProxySet = false
 
   constructor() {
     this.modelManager = new ModelManager()
@@ -47,6 +49,21 @@ export class ModelService {
 
   // 初始化
   async initialize(): Promise<void> {
+    if (!ModelService.isProxySet) {
+      const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+      if (proxyUrl) {
+        console.log(`[ModelService] Global proxy found, setting dispatcher: ${proxyUrl}`);
+        try {
+          const dispatcher = new ProxyAgent(proxyUrl);
+          setGlobalDispatcher(dispatcher);
+          ModelService.isProxySet = true;
+        } catch (error) {
+          console.error("[ModelService] Failed to set global proxy dispatcher:", error);
+        }
+      } else {
+        console.log("[ModelService] No global proxy found.");
+      }
+    }
     // 从环境变量加载配置
     this.configManager.loadFromEnvironment()
     
