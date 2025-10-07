@@ -1,9 +1,108 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { Play, BarChart3, TrendingUp, Award, Loader2, Square } from "lucide-react"
+
+interface FrameworkStat {
+  totalScore: number
+  averageScore: number
+  questionCount: number
+  maxScore: number
+  minScore: number
+  averageTotalScore: number
+  loopCount: number
+  allLoopTotalScores: number[]
+}
+
+interface AnalysisData {
+  frameworkScores: Record<string, number[]>
+  frameworkStats: Record<string, FrameworkStat>
+}
 
 export function DataAnalysis() {
+  const [directories, setDirectories] = useState<string[]>([])
+  const [selectedDirectory, setSelectedDirectory] = useState<string>("全部分析")
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false)
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
+  const [chartData, setChartData] = useState<any[]>([])
+
+  // 加载结果目录
+  useEffect(() => {
+    loadDirectories()
+  }, [])
+
+  const loadDirectories = async () => {
+    try {
+      const response = await fetch("/api/analyze-results")
+      const data = await response.json()
+      if (data.success) {
+        setDirectories(data.directories)
+      }
+    } catch (error) {
+      console.error("Failed to load directories:", error)
+    }
+  }
+
+  const analyzeResults = async () => {
+    if (isAnalyzing) return
+
+    setIsAnalyzing(true)
+    try {
+      const response = await fetch("/api/analyze-results", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          directory: selectedDirectory
+        })
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        setAnalysisData(data)
+        
+        // 转换数据为图表格式
+        const chartArray = Object.entries(data.frameworkStats).map(([framework, stats]) => {
+          const frameworkStats = stats as FrameworkStat
+          return {
+            framework,
+            totalScore: frameworkStats.totalScore,
+            averageScore: frameworkStats.averageScore,
+            questionCount: frameworkStats.questionCount
+          }
+        })
+        
+        setChartData(chartArray)
+      }
+    } catch (error) {
+      console.error("Failed to analyze results:", error)
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  const stopAnalysis = () => {
+    setIsAnalyzing(false)
+  }
+
+  const getTopFrameworks = () => {
+    if (!analysisData?.frameworkStats) return []
+    
+    return Object.entries(analysisData.frameworkStats)
+      .sort(([,a], [,b]) => {
+        const statA = a as FrameworkStat
+        const statB = b as FrameworkStat
+        return statB.totalScore - statA.totalScore
+      })
+      .slice(0, 3)
+  }
+
   return (
     <div className="p-4 md:p-8 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto">
       <div className="mb-6 border-b border-border pb-4 md:mb-8">
@@ -11,85 +110,136 @@ export function DataAnalysis() {
       </div>
 
       <div className="space-y-6">
-        {/* Analysis Overview */}
+        {/* 分析控制 */}
         <div className="space-y-4">
-          <div>
-            <Label className="text-base font-medium text-foreground">分析概览</Label>
-            <p className="text-sm text-muted-foreground mt-1">查看提示词工程的整体数据分析</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-6 bg-muted/20 rounded-lg border border-border">
-              <p className="text-sm text-muted-foreground mb-2">总运行次数</p>
-              <p className="text-2xl font-semibold text-foreground">0</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex-1">
+              <Label className="text-sm font-medium text-foreground">选择运行结果</Label>
+              <Select value={selectedDirectory} onValueChange={setSelectedDirectory} disabled={isAnalyzing}>
+                <SelectTrigger className="w-full md:w-80 disabled:opacity-50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="全部分析">全部分析</SelectItem>
+                  {directories.map((dir) => (
+                    <SelectItem key={dir} value={dir}>
+                      {dir}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="p-6 bg-muted/20 rounded-lg border border-border">
-              <p className="text-sm text-muted-foreground mb-2">成功率</p>
-              <p className="text-2xl font-semibold text-foreground">0%</p>
-            </div>
-            <div className="p-6 bg-muted/20 rounded-lg border border-border">
-              <p className="text-sm text-muted-foreground mb-2">平均响应时间</p>
-              <p className="text-2xl font-semibold text-foreground">0ms</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Performance Metrics */}
-        <div className="space-y-4 pt-6 border-t border-border">
-          <div>
-            <Label className="text-base font-medium text-foreground">性能指标</Label>
-            <p className="text-sm text-muted-foreground mt-1">详细的性能分析数据</p>
-          </div>
-
-          <div className="min-h-[300px] p-6 bg-muted/20 rounded-lg border border-border">
-            <p className="text-sm text-muted-foreground text-center">暂无性能数据</p>
-          </div>
-        </div>
-
-        {/* Quality Analysis */}
-        <div className="space-y-4 pt-6 border-t border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-base font-medium text-foreground">质量分析</Label>
-              <p className="text-sm text-muted-foreground mt-1">基于测试题集的质量评估</p>
-            </div>
-            <Button variant="outline" className="border-border bg-transparent">
-              生成报告
+            
+            <Button
+              onClick={isAnalyzing ? stopAnalysis : analyzeResults}
+              disabled={directories.length === 0}
+              className={isAnalyzing 
+                ? "bg-red-500 hover:bg-red-600 text-white flex-shrink-0 min-w-[100px]" 
+                : "bg-foreground text-background hover:bg-foreground/90 flex-shrink-0 min-w-[100px]"}
+            >
+              {isAnalyzing ? "停止分析" : "开始分析"}
             </Button>
           </div>
-
-          <div className="space-y-2">
-            <div className="p-4 bg-muted/20 rounded-lg border border-border">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-foreground">准确性</p>
-                <span className="text-sm text-muted-foreground">N/A</span>
-              </div>
-              <div className="w-full h-2 bg-muted rounded-full">
-                <div className="h-full bg-foreground rounded-full" style={{ width: "0%" }} />
-              </div>
-            </div>
-
-            <div className="p-4 bg-muted/20 rounded-lg border border-border">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-foreground">相关性</p>
-                <span className="text-sm text-muted-foreground">N/A</span>
-              </div>
-              <div className="w-full h-2 bg-muted rounded-full">
-                <div className="h-full bg-foreground rounded-full" style={{ width: "0%" }} />
-              </div>
-            </div>
-
-            <div className="p-4 bg-muted/20 rounded-lg border border-border">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-foreground">完整性</p>
-                <span className="text-sm text-muted-foreground">N/A</span>
-              </div>
-              <div className="w-full h-2 bg-muted rounded-full">
-                <div className="h-full bg-foreground rounded-full" style={{ width: "0%" }} />
-              </div>
-            </div>
-          </div>
         </div>
+
+        {/* 分析结果 */}
+        {analysisData && (
+          <>
+  
+            {/* 排行榜 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5" />
+                  框架排行榜
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {getTopFrameworks().map(([framework, stats], index) => (
+                    <div key={framework} className="flex items-center justify-between p-3 bg-muted/20 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                          index === 0 ? 'bg-yellow-500 text-yellow-900' :
+                          index === 1 ? 'bg-gray-400 text-gray-900' :
+                          index === 2 ? 'bg-amber-600 text-amber-900' :
+                          'bg-muted text-muted-foreground'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <div>
+                          <p className="font-medium">{framework}</p>
+                          <p className="text-sm text-muted-foreground">
+                            问题总数: {stats.questionCount} · 循环次数: {stats.loopCount} · 总得分: {stats.allLoopTotalScores.reduce((sum, score) => sum + score, 0).toFixed(0)} · 平均分: {stats.averageScore.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold">{stats.totalScore}</p>
+                        <p className="text-xs text-muted-foreground">平均每轮得分</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 柱状图 */}
+            <Card>
+              <CardHeader>
+                <CardTitle>框架得分对比</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="framework" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        interval={0}
+                      />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value: number, name: string) => [
+                          `${value} 分`,
+                          name === 'totalScore' ? '平均总分（每轮循环）' : '平均分（每个问题）'
+                        ]}
+                        labelFormatter={(label) => `框架: ${label}`}
+                      />
+                      <Bar dataKey="totalScore" fill="hsl(var(--primary))" name="totalScore" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* 加载状态 */}
+        {isAnalyzing && (
+          <Card>
+            <CardContent className="flex items-center justify-center py-12">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <p className="text-lg">正在分析结果数据...</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 空状态 */}
+        {!analysisData && !isAnalyzing && (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-lg text-muted-foreground mb-2">暂无分析数据</p>
+              <p className="text-sm text-muted-foreground">请选择运行结果并点击"开始分析"按钮</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
