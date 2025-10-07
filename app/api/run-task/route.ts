@@ -138,11 +138,13 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
     for (const fileName of knowledgeFiles) {
       const content = await readFile(join(knowledgeDir, fileName), 'utf-8')
       projectContext += `## 知识库文件: ${fileName}\n${content}\n\n`
+      console.error(`读取知识库文件 ${fileName} 成功， 上下文长度: ${projectContext.length}`);
     }
   } catch (e) {
       onProgress({ type: 'log', message: `警告: 未找到或无法读取知识库目录: ${knowledgeDir}` })
   }
   projectContext += `## 可用工具 (MCP Tools)\n\`\`\`json\n${JSON.stringify(config.project.mcpTools, null, 2)}\n\`\`\``
+  console.error(`读取可用工具列表成功，上下文长度: ${projectContext.length}`);
 
   // 步骤 7: 外层循环
   for (let loop = 1; loop <= config.testConfig.loopCount; loop++) {
@@ -192,18 +194,30 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         currentTask += (tasksToSkip - 1); // 已经加过1了，所以-1
         continue; // 直接进入下一个 for 循环（下一个框架）
       }
-      const systemPrompt = promptResult.content!
-      await writeFile(join(frameworkDir, `${framework.name}.md`), systemPrompt, 'utf-8')
+      const systemPromptFramework = promptResult.content!
+      await writeFile(join(frameworkDir, `${framework.name}.md`), systemPromptFramework, 'utf-8')
 
       onProgress({ 
         type: 'state_update', 
         payload: {
           frameworkName: framework.name, loop: loop, totalLoops: config.testConfig.loopCount,
-          systemPrompt: systemPrompt, questionId: undefined, questionText: undefined,
+          systemPrompt: systemPromptFramework, questionId: undefined, questionText: undefined,
           modelAnswer: undefined, score: undefined, maxScore: undefined,
         }
       });
 
+      // 为工作模型创建一个包含所有背景知识的系统提示词
+      const finalSystemPrompt = `
+        # 指令与规则
+        你必须严格遵守以下指令和规则来回答问题。
+        ${systemPromptFramework}
+
+        ---
+
+        # 背景资料、知识库与可用工具
+        在回答问题时，你必须参考和利用以下信息。
+        ${projectContext}
+      `;
       let qaResults: any[] = [];
 
       // 步骤 5: 循环处理所有问题
@@ -214,7 +228,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         currentTask++;
         onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在回答问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } })
 
-        const workMessages: LLMMessage[] = [createMessage.system(systemPrompt), createMessage.user(testCase.question)];
+        const workMessages: LLMMessage[] = [createMessage.system(finalSystemPrompt), createMessage.user(testCase.question)];
         // console.log(`工作模型: ${config.models.work}`);
         const workResult = await safeModelCall(config.models.work, workMessages);
         if (workResult.success) {
@@ -230,19 +244,42 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         if (workResult.success) {
           onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在评估问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } });
           const scoreMessages = createMessages.simple(
-            `你是一个严格的评分专家。请根据以下问题、标准答案和模型的回答，进行评分。
-            评分标准：满分 ${testCase.score} 分。请只返回一个阿拉伯数字作为分数，不要包含任何其他文字、符号或解释。
+            `你是一位极其严谨、注重事实的评估专家。你的任务是基于“标准答案”，评估“模型的回答”是否准确、完整地解决了用户的“问题”。
+
+            请严格遵循以下【思考与评估步骤】：
+
+            **第一步：核心事实核对**
+            1.  仔细阅读“标准答案”，提取出其中所有关键的事实信息点（Key Facts），特别是数字、价格、地点、专有名词等。
+            2.  逐一核对“模型的回答”中是否包含了这些关键事实点。
+            3.  判断“模型的回答”中出现的数字、价格等信息，是否与“标准答案”中的信息完全一致。如果不一致，这是一个严重的错误。
+
+            **第二步：语义与意图评估**
+            1.  评估“模型的回答”的整体含义是否与“标准答案”的核心意图一致。它是否正确回答了用户的原始“问题”？
+            2.  “标准答案”只是一个参考，可能并不完整。“模型的回答”可以包含比“标准答案”更多、更详细的正确信息。只要这些额外信息是与问题相关的、有帮助的，就不应该扣分，甚至可以认为是加分项。
+            3.  忽略无关紧要的措辞差异。例如，“我们提供接送服务”和“是的，公寓有接送服务”是等价的。
+
+            **第三步：最终评分**
+            1.  综合以上分析，给出一个最终分数。满分为 ${testCase.score} 分。
+            2.  评分标准：
+                *   **满分 (${testCase.score}分)**: “模型的回答”包含了“标准答案”中所有的关键事实点，所有数字都准确无误，并且可能还提供了一些有用的补充信息。
+                *   **高分 (7-${testCase.score - 1}分)**: 基本覆盖了所有关键事实，但可能遗漏了某个次要信息点，或者措辞上有些许不完美。
+                *   **中等分数 (4-6分)**: 遗漏了重要的事实信息，或者出现了不影响核心意图的数字错误。
+                *   **低分 (1-3分)**: 出现了严重的事实错误（例如价格、地址完全错误），或者回答基本没有解决用户的问题。
+                *   **0分**: 完全错误的回答，或者产生了有害的幻觉。
+
+            **输出要求：**
+            在完成上述所有思考步骤后，最终只输出一个阿拉伯数字作为你的最终分数。不要包含任何解释、理由、标题或任何其他文字。
 
             ---
             **问题:**
             ${testCase.question}
 
             ---
-            **标准答案:**
+            **标准答案 (参考事实来源):**
             ${testCase.answer}
 
             ---
-            **模型的回答:**
+            **模型的回答 (待评估对象):**
             ${modelAnswer}`
             );
           // console.log(`评分模型: ${config.models.score}`);
