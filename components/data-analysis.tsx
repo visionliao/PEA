@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { Play, BarChart3, TrendingUp, Award, Loader2, Square } from "lucide-react"
 
 interface FrameworkStat {
@@ -30,6 +30,7 @@ export function DataAnalysis() {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false)
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
   const [chartData, setChartData] = useState<any[]>([])
+  const [loopChartData, setLoopChartData] = useState<any[]>([])
 
   // 加载结果目录
   useEffect(() => {
@@ -79,6 +80,10 @@ export function DataAnalysis() {
         })
         
         setChartData(chartArray)
+        
+        // 生成循环测试数据
+        const loopChartArray = generateLoopChartData(data.frameworkStats)
+        setLoopChartData(loopChartArray)
       }
     } catch (error) {
       console.error("Failed to analyze results:", error)
@@ -101,6 +106,49 @@ export function DataAnalysis() {
         return statB.totalScore - statA.totalScore
       })
       .slice(0, 3)
+  }
+
+  // 生成循环测试数据
+  const generateLoopChartData = (frameworkStats: Record<string, FrameworkStat>) => {
+    const data: any[] = []
+    const frameworks = Object.keys(frameworkStats)
+    
+    if (frameworks.length === 0) return data
+    
+    // 获取循环次数
+    const loopCount = frameworkStats[frameworks[0]].loopCount
+    
+    for (let i = 0; i < loopCount; i++) {
+      const loopData: any = { name: `第${i + 1}轮` }
+      
+      frameworks.forEach(framework => {
+        const stats = frameworkStats[framework]
+        if (stats.allLoopTotalScores[i] !== undefined) {
+          loopData[framework] = stats.allLoopTotalScores[i]
+        }
+      })
+      
+      data.push(loopData)
+    }
+    
+    return data
+  }
+
+  // 获取框架颜色
+  const getFrameworkColor = (index: number) => {
+    const colors = [
+      'hsl(var(--primary))',
+      'hsl(220, 70%, 50%)',
+      'hsl(120, 70%, 50%)',
+      'hsl(30, 70%, 50%)',
+      'hsl(300, 70%, 50%)',
+      'hsl(180, 70%, 50%)',
+      'hsl(60, 70%, 50%)',
+      'hsl(270, 70%, 50%)',
+      'hsl(150, 70%, 50%)',
+      'hsl(0, 70%, 50%)'
+    ]
+    return colors[index % colors.length]
   }
 
   return (
@@ -187,7 +235,9 @@ export function DataAnalysis() {
             {/* 柱状图 */}
             <Card>
               <CardHeader>
-                <CardTitle>框架得分对比</CardTitle>
+                <CardTitle>
+                  框架平均得分对比({Object.values(analysisData.frameworkStats)[0]?.loopCount || 0}次循环)
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-[400px] w-full">
@@ -210,6 +260,40 @@ export function DataAnalysis() {
                         labelFormatter={(label) => `框架: ${label}`}
                       />
                       <Bar dataKey="totalScore" fill="hsl(var(--primary))" name="totalScore" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 每次测试得分对比 */}
+            <Card>
+              <CardHeader>
+                <CardTitle>每次测试各框架得分情况</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={loopChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        interval={0}
+                      />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      {Object.keys(analysisData?.frameworkStats || {}).map((framework, index) => (
+                        <Bar 
+                          key={framework} 
+                          dataKey={framework} 
+                          fill={getFrameworkColor(index)}
+                          name={framework}
+                        />
+                      ))}
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
