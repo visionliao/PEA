@@ -525,8 +525,13 @@ export function RunResults() {
                 {/* 2. 系统提示词 (如果有) */}
                 {currentRunState.systemPrompt && (
                   <div className="p-3 border rounded-md bg-background shadow-sm">
-                    <div className="flex items-center gap-2 font-semibold text-blue-700 mb-2 text-xs uppercase tracking-wide">
-                      <FileText size={14} /> System Prompt
+                    <div className="flex items-center justify-between font-semibold text-blue-700 mb-2 text-xs uppercase tracking-wide">
+                      <div className="flex items-center gap-2">
+                        <FileText size={14} /> System Prompt
+                      </div>
+                      <span className="font-mono text-xs text-muted-foreground lowercase">
+                        {modelSettingsConfig.promptModel}
+                      </span>
                     </div>
                     <pre className="whitespace-pre-wrap text-xs font-mono max-h-40 overflow-y-auto bg-muted/30 p-2 rounded">
                       {currentRunState.systemPrompt}
@@ -539,8 +544,13 @@ export function RunResults() {
                   <div className="p-3 border rounded-md bg-background shadow-sm space-y-3">
                     {/* 问题 */}
                     <div>
-                      <div className="flex items-center gap-2 font-semibold text-green-700 mb-1 text-xs uppercase tracking-wide">
-                        <HelpCircle size={14} /> Question #{currentRunState.questionId}
+                      <div className="flex items-center justify-between font-semibold text-green-700 mb-1 text-xs uppercase tracking-wide">
+                        <div className="flex items-center gap-2">
+                          <HelpCircle size={14} /> Question #{currentRunState.questionId}
+                        </div>
+                        <span className="font-mono text-xs text-muted-foreground lowercase">
+                          {modelSettingsConfig.workModel}
+                        </span>
                       </div>
                       <p className="text-sm p-2 bg-green-50 rounded">{currentRunState.questionText}</p>
                     </div>
@@ -563,7 +573,7 @@ export function RunResults() {
                 {currentRunState.score !== undefined && (
                   <div className="p-4 border rounded-md bg-purple-50 flex items-center justify-between animate-in fade-in zoom-in duration-300">
                     <div className="flex items-center gap-2 font-semibold text-purple-700">
-                      <Star size={18} /> 当前评分
+                      <Star size={18} /> 当前评分 ({modelSettingsConfig.scoreModel})
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="font-bold text-2xl text-purple-800">{currentRunState.score}</span>

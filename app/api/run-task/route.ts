@@ -179,6 +179,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         你的任务是结合项目背景和框架定义，输出一个可以直接用于指导工作模型的系统提示词。只输出提示词内容，不要包含任何额外的解释或标题。`
       );
 
+      // console.log(`提示词模型: ${config.models.prompt}`);
       const promptResult = await safeModelCall(config.models.prompt, promptGenMessages);
       currentTask++;
 
@@ -214,6 +215,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在回答问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } })
 
         const workMessages: LLMMessage[] = [createMessage.system(systemPrompt), createMessage.user(testCase.question)];
+        // console.log(`工作模型: ${config.models.work}`);
         const workResult = await safeModelCall(config.models.work, workMessages);
         if (workResult.success) {
           modelAnswer = workResult.content!;
@@ -243,6 +245,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
             **模型的回答:**
             ${modelAnswer}`
             );
+          // console.log(`评分模型: ${config.models.score}`);
           const scoreResult = await safeModelCall(config.models.score, scoreMessages);
 
           if (scoreResult.success) {

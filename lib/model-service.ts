@@ -56,7 +56,6 @@ export class ModelService {
         try {
           const dispatcher = new ProxyAgent(proxyUrl);
           setGlobalDispatcher(dispatcher);
-          ModelService.isProxySet = true;
         } catch (error) {
           console.error("[ModelService] Failed to set global proxy dispatcher:", error);
         }
@@ -64,6 +63,7 @@ export class ModelService {
         console.log("[ModelService] No global proxy found.");
       }
     }
+    ModelService.isProxySet = true;
     // 从环境变量加载配置
     this.configManager.loadFromEnvironment()
     
