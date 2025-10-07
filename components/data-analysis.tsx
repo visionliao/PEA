@@ -20,8 +20,15 @@ interface FrameworkStat {
 }
 
 interface AnalysisData {
-  frameworkScores: Record<string, number[]>
-  frameworkStats: Record<string, FrameworkStat>
+  frameworkScores?: Record<string, number[]>
+  frameworkStats?: Record<string, FrameworkStat>
+  isMultiDirectory?: boolean
+  directoryResults?: Array<{
+    directory: string
+    frameworkStats: Record<string, FrameworkStat>
+    loopCount: number
+  }>
+  directories?: string[]
 }
 
 export function DataAnalysis() {
@@ -68,22 +75,28 @@ export function DataAnalysis() {
       if (data.success) {
         setAnalysisData(data)
         
-        // 转换数据为图表格式
-        const chartArray = Object.entries(data.frameworkStats).map(([framework, stats]) => {
-          const frameworkStats = stats as FrameworkStat
-          return {
-            framework,
-            totalScore: frameworkStats.totalScore,
-            averageScore: frameworkStats.averageScore,
-            questionCount: frameworkStats.questionCount
-          }
-        })
-        
-        setChartData(chartArray)
-        
-        // 生成循环测试数据
-        const loopChartArray = generateLoopChartData(data.frameworkStats)
-        setLoopChartData(loopChartArray)
+        if (data.isMultiDirectory) {
+          // 全部分析模式，不需要生成图表数据
+          setChartData([])
+          setLoopChartData([])
+        } else {
+          // 单目录分析模式，生成图表数据
+          const chartArray = Object.entries(data.frameworkStats || {}).map(([framework, stats]) => {
+            const frameworkStats = stats as FrameworkStat
+            return {
+              framework,
+              totalScore: frameworkStats.totalScore,
+              averageScore: frameworkStats.averageScore,
+              questionCount: frameworkStats.questionCount
+            }
+          })
+          
+          setChartData(chartArray)
+          
+          // 生成循环测试数据
+          const loopChartArray = generateLoopChartData(data.frameworkStats || {})
+          setLoopChartData(loopChartArray)
+        }
       }
     } catch (error) {
       console.error("Failed to analyze results:", error)
@@ -193,112 +206,195 @@ export function DataAnalysis() {
         {/* 分析结果 */}
         {analysisData && (
           <>
-  
-            {/* 排行榜 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Award className="h-5 w-5" />
-                  框架排行榜
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {getTopFrameworks().map(([framework, stats], index) => (
-                    <div key={framework} className="flex items-center justify-between p-3 bg-muted/20 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                          index === 0 ? 'bg-yellow-500 text-yellow-900' :
-                          index === 1 ? 'bg-gray-400 text-gray-900' :
-                          index === 2 ? 'bg-amber-600 text-amber-900' :
-                          'bg-muted text-muted-foreground'
-                        }`}>
-                          {index + 1}
-                        </div>
-                        <div>
-                          <p className="font-medium">{framework}</p>
-                          <p className="text-sm text-muted-foreground">
-                            问题总数: {stats.questionCount} · 循环次数: {stats.loopCount} · 总得分: {stats.allLoopTotalScores.reduce((sum, score) => sum + score, 0).toFixed(0)} · 平均分: {stats.averageScore.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold">{stats.totalScore}</p>
-                        <p className="text-xs text-muted-foreground">平均每轮得分</p>
-                      </div>
-                    </div>
-                  ))}
+            {analysisData.isMultiDirectory ? (
+              // 全部分析模式 - 显示多个目录的图表
+              <div className="space-y-8">
+                <div className="text-center">
+                  <h2 className="text-xl font-semibold">全部分析结果</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    共 {analysisData.directoryResults?.length || 0} 次运行结果，按时间倒序排列
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* 柱状图 */}
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  框架平均得分对比({Object.values(analysisData.frameworkStats)[0]?.loopCount || 0}次循环)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[400px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="framework" 
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        interval={0}
-                      />
-                      <YAxis />
-                      <Tooltip 
-                        formatter={(value: number, name: string) => [
-                          `${value} 分`,
-                          name === 'totalScore' ? '平均总分（每轮循环）' : '平均分（每个问题）'
-                        ]}
-                        labelFormatter={(label) => `框架: ${label}`}
-                      />
-                      <Bar dataKey="totalScore" fill="hsl(var(--primary))" name="totalScore" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 每次测试得分对比 */}
-            <Card>
-              <CardHeader>
-                <CardTitle>每次测试各框架得分情况</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[400px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={loopChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="name" 
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        interval={0}
-                      />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      {Object.keys(analysisData?.frameworkStats || {}).map((framework, index) => (
-                        <Bar 
-                          key={framework} 
-                          dataKey={framework} 
-                          fill={getFrameworkColor(index)}
-                          name={framework}
-                        />
+                
+                {analysisData.directoryResults?.map((dirResult, dirIndex) => (
+                  <Card key={dirResult.directory}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <span>运行结果: {dirResult.directory}</span>
+                        <span className="text-sm text-muted-foreground">
+                          ({dirResult.loopCount}次循环)
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[400px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart 
+                            data={Object.entries(dirResult.frameworkStats).map(([framework, stats]) => ({
+                              framework,
+                              totalScore: stats.totalScore,
+                              averageScore: stats.averageScore
+                            }))} 
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis 
+                              dataKey="framework" 
+                              angle={-45}
+                              textAnchor="end"
+                              height={100}
+                              interval={0}
+                            />
+                            <YAxis />
+                            <Tooltip 
+                              formatter={(value: number, name: string) => [
+                                `${value} 分`,
+                                name === 'totalScore' ? '平均总分（每轮循环）' : '平均分（每个问题）'
+                              ]}
+                              labelFormatter={(label) => `框架: ${label}`}
+                            />
+                            <Bar dataKey="totalScore" fill={getFrameworkColor(dirIndex)} name="totalScore" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      
+                      {/* 该目录的排行榜 */}
+                      <div className="mt-6 space-y-3">
+                        <h4 className="font-medium text-sm">框架表现排名</h4>
+                        {Object.entries(dirResult.frameworkStats)
+                          .sort(([,a], [,b]) => b.totalScore - a.totalScore)
+                          .slice(0, 3)
+                          .map(([framework, stats], index) => (
+                            <div key={framework} className="flex items-center justify-between p-2 bg-muted/10 rounded text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                  index === 0 ? 'bg-yellow-500 text-yellow-900' :
+                                  index === 1 ? 'bg-gray-400 text-gray-900' :
+                                  index === 2 ? 'bg-amber-600 text-amber-900' :
+                                  'bg-muted text-muted-foreground'
+                                }`}>
+                                  {index + 1}
+                                </div>
+                                <span>{framework}</span>
+                              </div>
+                              <span>{stats.totalScore}分</span>
+                            </div>
+                          ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              // 单目录分析模式 - 显示原有的图表
+              <>
+                {/* 排行榜 */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Award className="h-5 w-5" />
+                      框架排行榜
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {getTopFrameworks().map(([framework, stats], index) => (
+                        <div key={framework} className="flex items-center justify-between p-3 bg-muted/20 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                              index === 0 ? 'bg-yellow-500 text-yellow-900' :
+                              index === 1 ? 'bg-gray-400 text-gray-900' :
+                              index === 2 ? 'bg-amber-600 text-amber-900' :
+                              'bg-muted text-muted-foreground'
+                            }`}>
+                              {index + 1}
+                            </div>
+                            <div>
+                              <p className="font-medium">{framework}</p>
+                              <p className="text-sm text-muted-foreground">
+                                问题总数: {stats.questionCount} · 循环次数: {stats.loopCount} · 总得分: {stats.allLoopTotalScores.reduce((sum, score) => sum + score, 0).toFixed(0)} · 平均分: {stats.averageScore.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold">{stats.totalScore}</p>
+                            <p className="text-xs text-muted-foreground">平均每轮得分</p>
+                          </div>
+                        </div>
                       ))}
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 柱状图 */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      框架平均得分对比({Object.values(analysisData.frameworkStats || {})[0]?.loopCount || 0}次循环)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[400px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis 
+                            dataKey="framework" 
+                            angle={-45}
+                            textAnchor="end"
+                            height={100}
+                            interval={0}
+                          />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value: number, name: string) => [
+                              `${value} 分`,
+                              name === 'totalScore' ? '平均总分（每轮循环）' : '平均分（每个问题）'
+                            ]}
+                            labelFormatter={(label) => `框架: ${label}`}
+                          />
+                          <Bar dataKey="totalScore" fill="hsl(var(--primary))" name="totalScore" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 每次测试得分对比 */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>每次测试各框架得分情况</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[400px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={loopChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis 
+                            dataKey="name" 
+                            angle={-45}
+                            textAnchor="end"
+                            height={100}
+                            interval={0}
+                          />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          {Object.keys(analysisData?.frameworkStats || {}).map((framework, index) => (
+                            <Bar 
+                              key={framework} 
+                              dataKey={framework} 
+                              fill={getFrameworkColor(index)}
+                              name={framework}
+                            />
+                          ))}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </>
         )}
 

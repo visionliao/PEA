@@ -57,28 +57,32 @@ async function analyzeAllDirectories() {
   const timestampDirs = directories
     .filter(dirent => dirent.isDirectory())
     .map(dirent => dirent.name)
+    .sort() // 按时间排序，最新的在后面
+    .reverse() // 反转，最新的在前面
   
-  let allFrameworkScores: Record<string, number[]> = {}
+  const directoryResults: any[] = []
   
   for (const dir of timestampDirs) {
     const dirResult = await analyzeDirectory(dir, false)
     if (dirResult && typeof dirResult === 'object' && 'success' in dirResult && dirResult.success) {
-      // 合并框架分数数据
-      Object.entries(dirResult.frameworkScores).forEach(([framework, scores]) => {
-        if (!allFrameworkScores[framework]) {
-          allFrameworkScores[framework] = []
-        }
-        allFrameworkScores[framework].push(...(scores as number[]))
+      const frameworkStatsValues = Object.values(dirResult.frameworkStats) as any[]
+      const firstStat = frameworkStatsValues[0]
+      
+      directoryResults.push({
+        directory: dir,
+        frameworkStats: dirResult.frameworkStats,
+        loopCount: firstStat?.loopCount || 0
       })
     }
   }
   
-  return {
+  return Response.json({
     success: true,
     directory: '全部分析',
-    frameworkScores: allFrameworkScores,
-    frameworkStats: calculateFrameworkStats(allFrameworkScores)
-  }
+    isMultiDirectory: true,
+    directoryResults,
+    directories: timestampDirs
+  })
 }
 
 async function analyzeDirectory(directory: string, returnFullResult = true): Promise<any> {
