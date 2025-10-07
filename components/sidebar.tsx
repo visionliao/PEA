@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { FileText, Lightbulb, Settings, Play, BookOpen, PanelLeftClose, PanelLeftOpen, ListChecks } from "lucide-react"
+import { FileText, Lightbulb, Settings, Play, BookOpen, PanelLeftClose, PanelLeftOpen, ListChecks, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
@@ -37,6 +37,11 @@ const menuItems = [
     id: "run-results",
     label: "运行/结果",
     icon: Play,
+  },
+  {
+    id: "data-analysis",
+    label: "数据分析",
+    icon: BarChart3,
   },
   {
     id: "user-manual",

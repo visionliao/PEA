@@ -9,6 +9,7 @@ import { TestQuestions } from "@/components/test-questions"
 import { RunResults } from "@/components/run-results"
 import { UserManual } from "@/components/user-manual"
 import { useAppStore } from "@/store/app-store"
+import { DataAnalysis } from "@/components/data-analysis"
 
 export function SettingsLayout() {
   const {
@@ -49,6 +50,7 @@ export function SettingsLayout() {
         {activeSection === "model-settings" && <ModelSettings />}
         {activeSection === "test-questions" && <TestQuestions />}
         {activeSection === "run-results" && <RunResults />}
+        {activeSection === "data-analysis" && <DataAnalysis />}
         {activeSection === "user-manual" && <UserManual />}
         {/* Other sections can be added here */}
       </main>
