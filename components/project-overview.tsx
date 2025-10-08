@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useCallback } from "react"
+import { useEffect, useRef, useCallback, useState } from "react"
 import { useAppStore } from "@/store/app-store"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -106,6 +106,9 @@ export function ProjectOverview() {
     setShowProjectExistsDialog,
     setExistingProjectName
   } = useAppStore()
+
+  // 添加加载状态
+  const [isFetchingTools, setIsFetchingTools] = useState(false)
 
   useEffect(() => {
     // Fetch the list of project folders
@@ -573,9 +576,118 @@ export function ProjectOverview() {
     ))
   }
 
-  const parseMcpToolsCode = () => {
+  const parseMcpToolsCode = async () => {
+    setParseError("")
+    const input = mcpToolsCode.trim()
+
+    if (!input) {
+      setParseError("请输入JSON数据或MCP服务器地址")
+      return
+    }
+
+    // 检测是否为URL格式
+    const urlPattern = /^https?:\/\/.+/
+    if (urlPattern.test(input)) {
+      // 如果是URL，从MCP服务器获取工具
+      await fetchToolsFromServer(input)
+    } else {
+      // 如果是JSON，使用原有逻辑解析
+      parseJsonTools(input)
+    }
+  }
+
+  // 从MCP服务器获取工具
+  const fetchToolsFromServer = async (serverUrl: string) => {
+    setIsFetchingTools(true)
     setParseError("")
 
+    try {
+      // 标准化URL
+      let url = serverUrl.trim()
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'http://' + url
+      }
+
+      // 确保URL以/结尾
+      if (!url.endsWith('/')) {
+        url += '/'
+      }
+
+      // 使用API路由与MCP服务器通信
+      const response = await fetch(`/api/mcp-tools?url=${encodeURIComponent(url)}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `无法连接到MCP服务器: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (!data.success || !data.tools) {
+        throw new Error("服务器返回的格式不正确")
+      }
+
+      // 转换工具格式
+      const parsedTools = data.tools.map((tool: any) => {
+        let methodParams = ""
+
+        // 处理OpenAI函数格式的参数结构
+        if (tool.parameters && tool.parameters.properties) {
+          const params = tool.parameters.properties
+          const paramNames = Object.keys(params)
+
+          methodParams = paramNames.map(name => {
+            const param = params[name]
+            const type = param.type || "string"
+            const description = param.description || ""
+            return `${name}:${type}:${description}`
+          }).join(";")
+        } else if (tool.parameters) {
+          if (typeof tool.parameters === "string") {
+            methodParams = tool.parameters
+          } else if (typeof tool.parameters === "object") {
+            const paramNames = Object.keys(tool.parameters)
+            methodParams = paramNames.map(name => {
+              const param = tool.parameters[name]
+              const type = typeof param === "object" && param.type ? param.type : typeof param
+              return `${name}:${type}`
+            }).join(";")
+          }
+        }
+
+        return {
+          methodName: tool.name || tool.methodName || "",
+          methodParams: methodParams,
+          description: tool.description || "",
+          returnValue: tool.returnValue || tool.returns || ""
+        }
+      })
+
+      if (parsedTools.length === 0) {
+        throw new Error("未获取到任何工具信息")
+      }
+
+      // 生成工具列表，追加到现有列表中
+      const newTools = parsedTools.map((tool: any, index: any) => ({
+        id: `fetched-${Date.now()}-${index}`,
+        methodName: tool.methodName,
+        methodParams: tool.methodParams,
+        description: tool.description,
+        returnValue: tool.returnValue
+      }))
+
+      // 追加到现有工具列表
+      setMcpTools([...(mcpTools || []), ...newTools])
+      
+    } catch (error) {
+      setParseError(`获取失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setIsFetchingTools(false)
+    }
+  }
+
+  // 解析JSON格式的工具
+  const parseJsonTools = (jsonString: string) => {
     try {
       let parsedTools: Array<{
         methodName: string
@@ -585,7 +697,7 @@ export function ProjectOverview() {
       }> = []
 
       // 预处理JSON：移除注释行、尾随逗号和多余空格
-      const cleanJsonString = mcpToolsCode
+      const cleanJsonString = jsonString
         .split('\n')
         .filter(line => !line.trim().startsWith('#')) // 移除以#开头的注释行
         .join('\n')
@@ -812,8 +924,8 @@ export function ProjectOverview() {
               <textarea
                 value={mcpToolsCode}
                 onChange={(e) => setMcpToolsCode(e.target.value)}
-                placeholder={`将mcp tools的json文本复制到这里，实现自动转换功能，也可以通过下方的增加方案按钮手动新增一个工具方法的声明。
-
+                placeholder={`1. 输入MCP服务器地址，例如：http://127.0.0.1:8000
+2. 将mcp tools的json文本复制到这里，实现自动转换功能，也可以通过下方的增加方案按钮手动新增一个工具方法的声明。
 // 支持JSON格式：
 [
   {
@@ -832,9 +944,16 @@ export function ProjectOverview() {
                 <Button
                   onClick={parseMcpToolsCode}
                   className="flex items-center gap-2 disabled:opacity-50"
-                  disabled={!isEditMode || isLoading}
+                  disabled={!isEditMode || isLoading || isFetchingTools}
                 >
-                  自动解析
+                  {isFetchingTools ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      获取中...
+                    </>
+                  ) : (
+                    "自动解析"
+                  )}
                 </Button>
 
                 {parseError && (
