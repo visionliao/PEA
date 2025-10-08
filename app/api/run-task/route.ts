@@ -131,20 +131,28 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
 
   // 步骤 1: 整合项目背景信息
   onProgress({ type: 'log', message: `正在加载项目 '${config.project.projectName}' 的背景资料...` })
-  let projectContext = `# 项目: ${config.project.projectName}\n\n## 项目背景\n${config.project.projectBackground}\n\n`
+
+  // 创建基础项目上下文（不包含MCP工具）
+  let baseProjectContext = `# 项目: ${config.project.projectName}\n\n## 项目背景\n${config.project.projectBackground}\n\n`
   const knowledgeDir = join(process.cwd(), "output", "project", config.project.projectName, "knowledge")
   try {
     const knowledgeFiles = await readdir(knowledgeDir)
     for (const fileName of knowledgeFiles) {
       const content = await readFile(join(knowledgeDir, fileName), 'utf-8')
-      projectContext += `## 知识库文件: ${fileName}\n${content}\n\n`
-      console.error(`读取知识库文件 ${fileName} 成功， 上下文长度: ${projectContext.length}`);
+      baseProjectContext += `## 知识库文件: ${fileName}\n${content}\n\n`
+      console.error(`读取知识库文件 ${fileName} 成功， 上下文长度: ${baseProjectContext.length}`);
     }
   } catch (e) {
       onProgress({ type: 'log', message: `警告: 未找到或无法读取知识库目录: ${knowledgeDir}` })
   }
-  projectContext += `## 可用工具 (MCP Tools)\n\`\`\`json\n${JSON.stringify(config.project.mcpTools, null, 2)}\n\`\`\``
-  console.error(`读取可用工具列表成功，上下文长度: ${projectContext.length}`);
+
+  // 创建用于提示词生成的上下文（包含MCP工具JSON）
+  const promptGenContext = baseProjectContext + `## 可用工具 (MCP Tools)\n\`\`\`json\n${JSON.stringify(config.project.mcpTools, null, 2)}\n\`\`\``
+  console.error(`提示词生成上下文创建完成，包含MCP工具，长度: ${promptGenContext.length}`);
+
+  // 创建用于工作模型的上下文（不包含MCP工具JSON）
+  const workContext = baseProjectContext
+  console.error(`工作模型上下文创建完成，不包含MCP工具，长度: ${workContext.length}`);
 
   // 步骤 7: 外层循环
   for (let loop = 1; loop <= config.testConfig.loopCount; loop++) {
@@ -166,7 +174,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         `请根据以下项目背景资料和提示词框架定义，为我生成一个高质量的系统提示词 (System Prompt)。
 
         **项目背景和资料:**
-        ${projectContext}
+        ${promptGenContext}
 
         ---
 
@@ -206,7 +214,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         }
       });
 
-      // 为工作模型创建一个包含所有背景知识的系统提示词
+      // 为工作模型创建一个包含所有背景知识的系统提示词（不包含MCP工具JSON）
       const finalSystemPrompt = `
         # 指令与规则
         你必须严格遵守以下指令和规则来回答问题。
@@ -214,9 +222,9 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
 
         ---
 
-        # 背景资料、知识库与可用工具
+        # 背景资料与知识库
         在回答问题时，你必须参考和利用以下信息。
-        ${projectContext}
+        ${workContext}
       `;
       let qaResults: any[] = [];
 
