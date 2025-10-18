@@ -66,26 +66,34 @@ export function ModelSettings() {
         // 检查默认模型是否在模型列表中
         const isValidModel = (modelName: string) => allModels.some((model: any) => model.name === modelName)
 
-        // 只在当前没有设置模型时才设置默认值
-        if (!promptModel) {
-          setPromptModel(isValidModel(defaultModels.promptModel) ? defaultModels.promptModel : allModels[0]?.name || '')
-        }
-        if (!workModel) {
-          setWorkModel(isValidModel(defaultModels.workModel) ? defaultModels.workModel : allModels[0]?.name || '')
-        }
-        if (!scoreModel) {
-          setScoreModel(isValidModel(defaultModels.scoreModel) ? defaultModels.scoreModel : allModels[0]?.name || '')
+        // 检查是否需要设置默认模型
+        const shouldSetDefaults = !promptModel || !workModel || !scoreModel ||
+                               !isValidModel(promptModel) || !isValidModel(workModel) || !isValidModel(scoreModel)
+
+        if (shouldSetDefaults) {
+          console.log('Setting default models:', defaultModels)
+
+          // 强制设置默认值
+          const promptModelToSet = isValidModel(defaultModels.promptModel) ? defaultModels.promptModel : allModels[0]?.name || ''
+          const workModelToSet = isValidModel(defaultModels.workModel) ? defaultModels.workModel : allModels[0]?.name || ''
+          const scoreModelToSet = isValidModel(defaultModels.scoreModel) ? defaultModels.scoreModel : allModels[0]?.name || ''
+
+          setPromptModel(promptModelToSet)
+          setWorkModel(workModelToSet)
+          setScoreModel(scoreModelToSet)
         }
       } catch (error) {
         console.error('Error loading model configurations:', error)
       }
     }
 
-    // 只有在模型列表为空时才加载
-    if (!models || models.length === 0) {
+    // 首次加载或模型列表为空时，都重新加载
+    const shouldLoad = !models || models.length === 0 || !promptModel || !workModel || !scoreModel
+    if (shouldLoad) {
+      console.log('Loading model configurations...')
       loadModels()
     }
-  }, [(models || []).length, promptModel, workModel, scoreModel, setProviders, setModels, setPromptModel, setWorkModel, setScoreModel])
+  }, [models?.length, promptModel, workModel, scoreModel])
 
   // 获取模型提供商显示名称
   const getModelProvider = (modelName: string) => {
