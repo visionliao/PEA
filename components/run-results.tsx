@@ -85,12 +85,23 @@ export function RunResults() {
     loadTestCases()
   }, [scoreThresholdEnabled, scoreThreshold, setScoreThreshold, setTotalTestScore])
 
-  // 组件卸载时清理 EventSource，防止内存泄漏
+  // 组件挂载时检查是否已有任务在运行
+  useEffect(() => {
+    // 如果 store 显示正在执行，但本组件没有 controller，说明是重新挂载的情况
+    if (isExecuting && !abortControllerRef.current) {
+      console.log("Detected re-mount while task is running. Task continues in background.");
+      setActiveTaskMessage("任务在后台运行中。您可以切换到其他面板，任务会继续执行。");
+    }
+  }, [isExecuting]);
+
+  // 组件卸载时不要清理 EventSource，允许用户切换面板后任务继续运行
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      // 注意：这里不 abort controller，允许任务在后台继续运行
+      // if (abortControllerRef.current) {
+      //   abortControllerRef.current.abort();
+      // }
+      console.log("RunResults component unmounting, but task continues running in background");
     };
   }, []);
 
