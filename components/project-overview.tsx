@@ -297,20 +297,6 @@ export function ProjectOverview() {
     }
   }
 
-  const handleCancel = () => {
-    // 清空所有表单数据
-    setSelectedProject("自定义")
-    setProjectName("")
-    setProjectBackground("")
-    setKnowledgeBaseFiles([])
-    setKnowledgeBaseFileData([])
-    setMcpTools([])
-    setMcpToolsCode("")
-    setParseError("")
-    setIsEditMode(true)
-    setShowSuccess(false)
-  }
-
   const handleEdit = () => {
     setIsEditMode(true)
   }
@@ -953,16 +939,6 @@ export function ProjectOverview() {
               <Save className="h-4 w-4" />
               <span className="text-sm">应用成功</span>
             </div>
-          )}
-
-          {isEditMode && (
-            <Button
-              variant="outline"
-              onClick={handleCancel}
-              className="border-border hover:bg-muted"
-            >
-              取消
-            </Button>
           )}
 
           <Button
