@@ -16,8 +16,26 @@ export function RunResults() {
   const [showValidationDialog, setShowValidationDialog] = useState(false)
   const [validationMessage, setValidationMessage] = useState("")
   const [totalTokenUsage, setTotalTokenUsage] = useState(0)
-  // EventSource 的引用，用于管理连接
+
+  // 使用全局 AbortController 引用，确保在组件重新挂载时能访问到同一个 controller
+  // 这样切换面板后，停止运行按钮还能正常工作
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // 如果全局没有 AbortController，创建一个
+    if (!(window as any).globalAbortController) {
+      (window as any).globalAbortController = null;
+    }
+
+    // 组件挂载时，将全局 controller 引用保存到本地 ref
+    abortControllerRef.current = (window as any).globalAbortController;
+
+    // 组件卸载时，不清除全局 controller，只清除本地引用
+    return () => {
+      // 不清除全局 controller，让其他组件实例可以访问
+      abortControllerRef.current = null;
+    };
+  }, []);
 
   const {
     runResultsConfig: {
@@ -199,9 +217,20 @@ export function RunResults() {
     setCurrentTask(0);
     setProgress(0);
 
+    // 检查是否已经有任务在运行
+    if ((window as any).globalAbortController) {
+      console.log("Global AbortController already exists. Task is running in background.");
+      setActiveTaskMessage("检测到任务正在后台运行中。停止按钮可正常使用，但无法启动新任务。");
+      return; // 不启动新任务，但允许停止现有任务
+    }
+
     // 创建 AbortController
     const controller = new AbortController();
     abortControllerRef.current = controller;
+
+    // 保存到全局引用，确保切换面板后还能访问到同一个 controller
+    (window as any).globalAbortController = controller;
+    console.log("Created new global AbortController");
 
     // --- 2. 准备配置 ---
     const config = {
@@ -309,6 +338,8 @@ export function RunResults() {
       }
     } finally {
         abortControllerRef.current = null;
+        // 同时清除全局 AbortController，避免残留引用
+        (window as any).globalAbortController = null;
     }
   };
 
