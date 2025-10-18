@@ -1,7 +1,8 @@
-// app/api/mcp-test/route.ts
+// app/api/mcp-tools/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ToolClient } from '@/lib/llm/tools/tool-client';
+import { getToolClientInstance } from '@/lib/llm/tools/tool-client-manager';
 
 interface TestRequestBody {
   url: string;
@@ -108,5 +109,50 @@ export async function POST(request: NextRequest): Promise<NextResponse<TestRespo
       message: 'Invalid request format',
       error: error instanceof Error ? error.message : String(error)
     } as TestResponse, { status: 400 });
+  }
+}
+
+// 获取完整的 MCP 工具列表
+export async function GET(request: NextRequest) {
+  // 从请求的 URL 中获取查询参数
+  const { searchParams } = new URL(request.url);
+  const url = searchParams.get('url');
+
+  // 1. 验证 'url' 参数是否存在
+  if (!url) {
+    return NextResponse.json(
+      { success: false, error: 'URL query parameter is required' },
+      { status: 400 }
+    );
+  }
+
+  console.log(`--- [MCP GET] Fetching tools from: ${url} ---`);
+
+  try {
+    // 2. 使用 ToolClient 从指定的 URL 获取工具
+    const client = getToolClientInstance(url);
+    const toolsSchema = await client.getToolsSchema();
+
+    // 处理未返回任何工具的情况
+    if (!toolsSchema || toolsSchema.length === 0) {
+      return NextResponse.json({ success: true, tools: [] }, { status: 200 });
+    }
+    console.log(`--- 获取工具列表结果： ${JSON.stringify(toolsSchema, null, 2)}`);
+
+    // 3. 成功时，返回包含工具列表的 JSON 响应
+    //    这里的 { success: true, tools: tools } 格式与你前端代码的期望完全匹配
+    return NextResponse.json({ success: true, tools: toolsSchema }, { status: 200 });
+
+  } catch (error) {
+    // 4. 发生错误时，记录错误并返回一个标准的错误响应
+    console.error(`[MCP GET] Error fetching tools from ${url}:`, error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Failed to fetch tools from MCP server',
+        details: error instanceof Error ? error.message : String(error) 
+      }, 
+      { status: 500 }
+    );
   }
 }

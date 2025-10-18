@@ -35,8 +35,11 @@ export class ToolClient {
         try {
             console.log(`--- [Server Detection] Detecting server type for ${this.serverUrl} ---`);
 
+            // 清理一下 serverUrl，确保它没有结尾的斜杠
+            const baseUrl = this.serverUrl.replace(/\/$/, '');
+
             // 首先尝试检测FastMCP的SSE端点
-            const sseUrl = `${this.serverUrl}/sse`;
+            const sseUrl = `${baseUrl}/sse`;
             console.log(`--- [Server Detection] Testing FastMCP SSE endpoint: ${sseUrl} ---`);
 
             try {
@@ -56,7 +59,7 @@ export class ToolClient {
             }
 
             // 尝试检测FastAPI的tools端点
-            const toolsUrl = `${this.serverUrl}/tools`;
+            const toolsUrl = `${baseUrl}/tools`;
             console.log(`--- [Server Detection] Testing FastAPI tools endpoint: ${toolsUrl} ---`);
 
             try {
@@ -144,16 +147,17 @@ export class ToolClient {
     public async getToolsSchema(): Promise<McpToolSchema[] | undefined> {
         if (!this.serverUrl) return undefined;
         if (this.toolsCache) return this.toolsCache;
+        const baseUrl = this.serverUrl.replace(/\/$/, '');
 
         try {
             const isFastMCP = await this.isFastMCPServer();
 
             if (isFastMCP) {
-                console.log(`--- [Tool Discovery] Using FastMCP client for ${this.serverUrl} ---`);
+                console.log(`--- [Tool Discovery] Using FastMCP client for ${baseUrl} ---`);
                 this.toolsCache = await this.getFastMCPClient().getToolsSchema();
             } else {
-                console.log(`--- [Tool Discovery] Using FastAPI client for ${this.serverUrl} ---`);
-                const response = await fetch(`${this.serverUrl}/tools`);
+                console.log(`--- [Tool Discovery] Using FastAPI client for ${baseUrl} ---`);
+                const response = await fetch(`${baseUrl}/tools`);
                 if (!response.ok) throw new Error(`Failed to fetch tools: ${response.statusText}`);
                 const schema = await response.json();
                 this.toolsCache = schema as McpToolSchema[];
@@ -178,6 +182,7 @@ export class ToolClient {
         console.log(`--- [ToolClient] Calling tool: ${toolName} with args:`, toolArgs);
         try {
             const isFastMCP = await this.isFastMCPServer();
+            const baseUrl = this.serverUrl.replace(/\/$/, '');
 
             if (isFastMCP) {
                 console.log(`--- [ToolClient] Using FastMCP client for tool execution ---`);
@@ -186,7 +191,7 @@ export class ToolClient {
                 return result;
             } else {
                 console.log(`--- [ToolClient] Using FastAPI client for tool execution ---`);
-                const response = await fetch(`${this.serverUrl}/call`, {
+                const response = await fetch(`${baseUrl}/call`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tool_name: toolName, arguments: toolArgs }),

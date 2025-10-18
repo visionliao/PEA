@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { FolderOpen, FileText, Upload, Plus, Trash2, Loader2, Save, Edit, AlertTriangle } from "lucide-react"
+import { FolderOpen, FileText, Upload, Trash2, Loader2, Save, Edit, AlertTriangle } from "lucide-react"
 
 // 自动调整textarea高度的组件
 const AutoResizeTextarea = ({
@@ -555,17 +555,6 @@ export function ProjectOverview() {
     setKnowledgeBaseFileData([])
   }
 
-  const addMcpTool = () => {
-    const newTool = {
-      id: Date.now().toString(),
-      methodName: "",
-      methodParams: "",
-      description: "",
-      returnValue: ""
-    }
-    setMcpTools([...(mcpTools || []), newTool])
-  }
-
   const removeMcpTool = (id: string) => {
     setMcpTools((mcpTools || []).filter(tool => tool.id !== id))
   }
@@ -581,19 +570,12 @@ export function ProjectOverview() {
     const input = mcpToolsCode.trim()
 
     if (!input) {
-      setParseError("请输入JSON数据或MCP服务器地址")
+      setParseError("请输入MCP服务器地址")
       return
     }
 
-    // 检测是否为URL格式
-    const urlPattern = /^https?:\/\/.+/
-    if (urlPattern.test(input)) {
-      // 如果是URL，从MCP服务器获取工具
-      await fetchToolsFromServer(input)
-    } else {
-      // 如果是JSON，使用原有逻辑解析
-      parseJsonTools(input)
-    }
+    // 直接获取MCP服务器工具
+    await fetchToolsFromServer(input)
   }
 
   // 从MCP服务器获取工具
@@ -627,39 +609,79 @@ export function ProjectOverview() {
         throw new Error("服务器返回的格式不正确")
       }
 
-      // 转换工具格式
+      // 转换工具格式 - 兼容两种新格式
       const parsedTools = data.tools.map((tool: any) => {
         let methodParams = ""
 
-        // 处理OpenAI函数格式的参数结构
-        if (tool.parameters && tool.parameters.properties) {
-          const params = tool.parameters.properties
-          const paramNames = Object.keys(params)
+        // 获取工具信息 - 兼容两种格式
+        const functionInfo = tool.function || tool
+        const methodName = functionInfo.name || ""
+        const description = functionInfo.description || ""
 
-          methodParams = paramNames.map(name => {
-            const param = params[name]
-            const type = param.type || "string"
-            const description = param.description || ""
-            return `${name}:${type}:${description}`
-          }).join(";")
-        } else if (tool.parameters) {
-          if (typeof tool.parameters === "string") {
-            methodParams = tool.parameters
-          } else if (typeof tool.parameters === "object") {
-            const paramNames = Object.keys(tool.parameters)
+        // 处理参数结构
+        if (functionInfo.parameters) {
+          const parameters = functionInfo.parameters
+
+          // 第一种格式：parameters 包含 properties 和 title 等字段
+          if (parameters.properties && parameters.type === "object") {
+            const params = parameters.properties
+            const paramNames = Object.keys(params)
+
             methodParams = paramNames.map(name => {
-              const param = tool.parameters[name]
-              const type = typeof param === "object" && param.type ? param.type : typeof param
-              return `${name}:${type}`
+              const param = params[name]
+              const type = param.type || "string"
+              const description = param.description || ""
+              // 检查是否为必需参数
+              const required = parameters.required?.includes(name) || false
+              const requiredStr = required ? " (必需)" : " (可选)"
+              return `${name}:${type}:${description}${requiredStr}`
+            }).join(";")
+          }
+          // 第二种格式：parameters 直接包含 type 和 properties
+          else if (parameters.type === "object" && parameters.properties) {
+            const params = parameters.properties
+            const paramNames = Object.keys(params)
+
+            methodParams = paramNames.map(name => {
+              const param = params[name]
+              const type = param.type || "string"
+              const description = param.description || ""
+              // 检查是否为必需参数
+              const required = parameters.required?.includes(name) || false
+              const requiredStr = required ? " (必需)" : " (可选)"
+              return `${name}:${type}:${description}${requiredStr}`
+            }).join(";")
+          }
+          // 处理复杂类型（如 anyOf）
+          else if (parameters.properties) {
+            const params = parameters.properties
+            const paramNames = Object.keys(params)
+
+            methodParams = paramNames.map(name => {
+              const param = params[name]
+              let type = "string"
+
+              // 处理 anyOf 类型
+              if (param.anyOf) {
+                type = param.anyOf.map((item: any) => item.type || "string").join("|")
+              } else {
+                type = param.type || "string"
+              }
+
+              const description = param.description || ""
+              // 检查是否为必需参数
+              const required = parameters.required?.includes(name) || false
+              const requiredStr = required ? " (必需)" : " (可选)"
+              return `${name}:${type}:${description}${requiredStr}`
             }).join(";")
           }
         }
 
         return {
-          methodName: tool.name || tool.methodName || "",
+          methodName: methodName,
           methodParams: methodParams,
-          description: tool.description || "",
-          returnValue: tool.returnValue || tool.returns || ""
+          description: description,
+          returnValue: "" // 新格式中可能不包含返回值信息
         }
       })
 
@@ -683,100 +705,6 @@ export function ProjectOverview() {
       setParseError(`获取失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setIsFetchingTools(false)
-    }
-  }
-
-  // 解析JSON格式的工具
-  const parseJsonTools = (jsonString: string) => {
-    try {
-      let parsedTools: Array<{
-        methodName: string
-        methodParams: string
-        description: string
-        returnValue: string
-      }> = []
-
-      // 预处理JSON：移除注释行、尾随逗号和多余空格
-      const cleanJsonString = jsonString
-        .split('\n')
-        .filter(line => !line.trim().startsWith('#')) // 移除以#开头的注释行
-        .join('\n')
-        .replace(/,\s*([\]}])/g, '$1') // 移除尾随逗号
-        .trim()
-
-      // 尝试解析JSON
-      const jsonData = JSON.parse(cleanJsonString)
-
-      let toolsToProcess: any[] = []
-
-      if (Array.isArray(jsonData)) {
-        // 处理数组格式
-        toolsToProcess = jsonData
-      } else if (jsonData.tools && Array.isArray(jsonData.tools)) {
-        // 处理包含tools字段的对象
-        toolsToProcess = jsonData.tools
-      } else {
-        throw new Error("JSON格式不正确，应该是数组或包含tools字段的对象")
-      }
-
-      parsedTools = toolsToProcess.map(item => {
-        let methodParams = ""
-
-        // 处理OpenAI函数格式的参数结构
-        if (item.parameters && item.parameters.properties) {
-          const params = item.parameters.properties
-          const paramNames = Object.keys(params)
-
-          // 构建参数字符串，格式：name:type:description;name2:type2:description2
-          methodParams = paramNames.map(name => {
-            const param = params[name]
-            const type = param.type || "string"
-            const description = param.description || ""
-            return `${name}:${type}:${description}`
-          }).join(";")
-        } else if (item.parameters) {
-          // 处理简单格式的参数
-          if (typeof item.parameters === "string") {
-            methodParams = item.parameters
-          } else if (typeof item.parameters === "object") {
-            // 如果是对象，尝试提取参数信息
-            const paramNames = Object.keys(item.parameters)
-            methodParams = paramNames.map(name => {
-              const param = item.parameters[name]
-              const type = typeof param === "object" && param.type ? param.type : typeof param
-              return `${name}:${type}`
-            }).join(";")
-          }
-        } else if (item.methodParams) {
-          // 兼容原有的methodParams字段
-          methodParams = item.methodParams
-        }
-
-        return {
-          methodName: item.name || item.methodName || "",
-          methodParams: methodParams,
-          description: item.description || "",
-          returnValue: item.returnValue || item.returns || ""
-        }
-      })
-
-      if (parsedTools.length === 0) {
-        throw new Error("未解析到任何工具信息")
-      }
-
-      // 生成工具列表，追加到现有列表中
-      const newTools = parsedTools.map((tool, index) => ({
-        id: `parsed-${Date.now()}-${index}`,
-        methodName: tool.methodName,
-        methodParams: tool.methodParams,
-        description: tool.description,
-        returnValue: tool.returnValue
-      }))
-
-      // 追加到现有工具列表
-      setMcpTools([...(mcpTools || []), ...newTools])
-    } catch (error) {
-      setParseError(`解析失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
 
@@ -924,19 +852,9 @@ export function ProjectOverview() {
               <textarea
                 value={mcpToolsCode}
                 onChange={(e) => setMcpToolsCode(e.target.value)}
-                placeholder={`1. 输入MCP服务器地址，例如：http://127.0.0.1:8000
-2. 将mcp tools的json文本复制到这里，实现自动转换功能，也可以通过下方的增加方案按钮手动新增一个工具方法的声明。
-// 支持JSON格式：
-[
-  {
-    "name": "get_weather",
-    "parameters": "city: string",
-    "description": "获取指定城市的天气信息",
-    "returnValue": "temperature: number, condition: string"
-  }
-]`}
+                placeholder={`输入MCP服务器地址，例如：http://127.0.0.1:8000`}
                 disabled={!isEditMode || isLoading}
-                className="w-full h-[15rem] p-3 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-[3rem] p-3 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               />
 
               {/* 解析按钮和错误提示 */}
@@ -952,7 +870,7 @@ export function ProjectOverview() {
                       获取中...
                     </>
                   ) : (
-                    "自动解析"
+                    "获取工具"
                   )}
                 </Button>
 
@@ -1025,17 +943,7 @@ export function ProjectOverview() {
               </div>
             ))}
 
-            {/* 添加方法按钮 */}
-            <Button
-              variant="outline"
-              onClick={addMcpTool}
-              className="flex items-center gap-2 disabled:opacity-50"
-              disabled={!isEditMode || isLoading}
-            >
-              <Plus className="h-4 w-4" />
-              增加方法
-            </Button>
-          </div>
+            </div>
         </div>
 
 

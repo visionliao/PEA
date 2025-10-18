@@ -194,7 +194,6 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         topP: promptModelConfig.top_p,
         presencePenalty: promptModelConfig.presencePenalty,
         frequencyPenalty: promptModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
-        mcpServerUrl: 'http://127.0.0.1:8001', // mcp服务器地址
         systemPrompt: promptString, // 系统提示词
         maxToolCalls: 10 // 最大工具调用次数
       };
@@ -247,6 +246,10 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在回答问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } })
 
         const workModelConfig = config.models.work;
+        // 从项目配置中获取MCP服务器地址
+        const mcpServerUrl = config.project.mcpToolsCode && config.project.mcpToolsCode.trim()
+          ? config.project.mcpToolsCode.trim() : '';
+        
         const workOptions: LlmGenerationOptions = {
           stream: false,
           timeoutMs: 90000,
@@ -255,7 +258,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
           topP: workModelConfig.top_p,
           presencePenalty: workModelConfig.presencePenalty,
           frequencyPenalty: workModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
-          mcpServerUrl: 'http://127.0.0.1:8001', // mcp服务器地址
+          mcpServerUrl: mcpServerUrl, // 从项目配置获取mcp服务器地址
           systemPrompt: finalSystemPrompt, // 系统提示词
           maxToolCalls: 10 // 最大工具调用次数
         };
@@ -327,9 +330,8 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
             topP: scoreModelConfig.top_p,
             presencePenalty: scoreModelConfig.presencePenalty,
             frequencyPenalty: scoreModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
-            mcpServerUrl: '', // mcp服务器地址
             systemPrompt: scoreSystemPrompt, // 系统提示词
-            maxToolCalls: 0 // 最大工具调用次数
+            maxToolCalls: 10 // 最大工具调用次数
           };
           const scoreGenMessages: ChatMessage[] = [
             {

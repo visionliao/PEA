@@ -47,6 +47,7 @@ export abstract class BaseChatProvider {
     };
     console.log('[TokenCount] 初始token计数:', totalUsage);
 
+    console.log('本次对话已循环次数:', toolCallCount);
     while (toolCallCount < MAX_TOOL_CALLS) {
       // 1. 如果配置了 mcp，则获取工具列表
       let tools: McpToolSchema[] | undefined;

@@ -38,14 +38,26 @@ export async function POST(request: Request) {
 
     // 复制知识库文件
     const copiedFiles = []
+    const fileDataArray = body.fileData || []
+    
     for (const filePath of knowledgeBaseFiles) {
       try {
         // 从请求数据中获取文件对象
-        const fileData = body.fileData?.find((f: any) => f.path === filePath)
+        let fileData = fileDataArray.find((f: any) => f.path === filePath)
+        
+        // 如果没有精确匹配，尝试只匹配文件名
+        if (!fileData) {
+          const fileName = filePath.split('/').pop() || filePath
+          fileData = fileDataArray.find((f: any) => {
+            const dataFileName = f.path.split('/').pop() || f.path
+            return dataFileName === fileName || f.name === fileName
+          })
+        }
 
         if (fileData && fileData.content) {
           // 如果有文件内容数据，直接写入文件
-          const destPath = join(knowledgeDir, filePath.split('/').pop() || filePath)
+          const fileName = filePath.split('/').pop() || filePath
+          const destPath = join(knowledgeDir, fileName)
 
           // 处理 data URL 格式 (data:text/plain;base64,...)
           let content = fileData.content
@@ -61,21 +73,14 @@ export async function POST(request: Request) {
           await writeFile(destPath, buffer)
           copiedFiles.push({
             original: filePath,
-            copied: `${projectName}/knowledge/${filePath.split('/').pop() || filePath}`
+            copied: `${projectName}/knowledge/${fileName}`
           })
         } else {
-          // 如果没有文件内容，尝试从文件系统复制（向后兼容）
-          const sourcePath = join(process.cwd(), filePath)
-          const destPath = join(knowledgeDir, filePath.split('/').pop() || filePath)
-
-          await copyFile(sourcePath, destPath)
-          copiedFiles.push({
-            original: filePath,
-            copied: `${projectName}/knowledge/${filePath.split('/').pop() || filePath}`
-          })
+          // 如果没有文件内容，记录警告但不报错
+          console.warn(`Warning: No file content data found for ${filePath}. Skipping file copy.`)
         }
       } catch (error) {
-        console.error(`Error copying file ${filePath}:`, error)
+        console.error(`Error processing file ${filePath}:`, error)
       }
     }
 

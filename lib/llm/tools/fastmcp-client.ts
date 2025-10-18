@@ -40,7 +40,10 @@ export class FastMCPClient {
         }
 
         try {
-            const sseUrl = `${this.serverUrl}/sse`;
+            // 清理一下 serverUrl，确保它没有结尾的斜杠
+            const baseUrl = this.serverUrl.replace(/\/$/, '');
+
+            const sseUrl = `${baseUrl}/sse`;
             console.log(`--- [FastMCP Client] Initializing connection to ${sseUrl} ---`);
 
             // 创建SSE传输连接，添加超时控制
