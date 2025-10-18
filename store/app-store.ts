@@ -522,7 +522,7 @@ export const useAppStore = create<AppState>()(
           projectBackground: state.projectConfig.projectBackground,
           knowledgeBaseFiles: state.projectConfig.knowledgeBaseFiles,
           mcpTools: state.projectConfig.mcpTools,
-          // 不持久化 mcpToolsCode，避免项目间数据污染
+          mcpToolsCode: state.projectConfig.mcpToolsCode,
         },
         promptFrameworkConfig: {
           selectedFrameworks: state.promptFrameworkConfig.selectedFrameworks,
