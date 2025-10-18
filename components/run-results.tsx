@@ -163,7 +163,7 @@ export function RunResults() {
 
     // 通过 AbortController 取消正在进行的 fetch 请求
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+      abortControllerRef.current.abort(); // 传递到后端的abort事件
     }
 
     stopRun();
@@ -285,7 +285,6 @@ export function RunResults() {
           }
         }
       }
-
     } catch (error: any) {
       // 捕获所有错误，包括 fetch 失败、流读取失败和手动取消
       if (error.name === 'AbortError') {

@@ -94,6 +94,8 @@ export async function POST(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
+      let isAborted = false
+
       try {
         const runTimestamp = getTimestamp()
         const baseResultDir = join(process.cwd(), "output", "result", runTimestamp)
@@ -101,13 +103,37 @@ export async function POST(request: NextRequest) {
 
         sendEvent(controller, { type: 'log', message: `结果目录已创建: ${runTimestamp}` })
 
-        // 调用主任务执行器
-        await runTask(config, baseResultDir, (data) => sendEvent(controller, data))
+        // 监听请求取消事件
+        const abortListener = () => {
+          isAborted = true
+          console.log("Request aborted by client.")
+        }
+        // 添加前端传递过来的abort监听
+        request.signal.addEventListener('abort', abortListener)
 
-        sendEvent(controller, { type: 'done', message: '所有任务已成功完成。' })
+        // 调用主任务执行器，传递取消检查函数
+        await runTask(config, baseResultDir, (data) => {
+          // 每次发送进度前检查是否已取消
+          if (isAborted || request.signal.aborted) {
+            throw new Error('任务已被用户取消');
+          }
+          sendEvent(controller, data)
+        }, () => isAborted || request.signal.aborted)
+
+        // 移除监听器
+        request.signal.removeEventListener('abort', abortListener)
+
+        if (!isAborted && !request.signal.aborted) {
+          sendEvent(controller, { type: 'done', message: '所有任务已成功完成。' })
+        }
       } catch (error: any) {
-        console.error("Task execution error:", error)
-        sendEvent(controller, { type: 'error', message: error.message || "发生未知错误" })
+        if (error.message === '任务已被用户取消') {
+          console.log("Task execution cancelled by user.");
+          sendEvent(controller, { type: 'error', message: '任务已被用户取消。' })
+        } else {
+          console.error("Task execution error:", error)
+          sendEvent(controller, { type: 'error', message: error.message || "发生未知错误" })
+        }
       } finally {
         controller.close()
       }
@@ -127,7 +153,7 @@ export async function POST(request: NextRequest) {
 }
 
 // 主任务执行器
-async function runTask(config: any, baseResultDir: string, onProgress: (data: object) => void) {
+async function runTask(config: any, baseResultDir: string, onProgress: (data: object) => void, isCancelled: () => boolean = () => false) {
   // 总任务数计算公式
   const totalTasks = (config.promptFrameworks.length + config.promptFrameworks.length * config.testCases.length * 2) * config.testConfig.loopCount;
   let currentTask = 0;
@@ -160,11 +186,20 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
 
   // 步骤 7: 外层循环
   for (let loop = 1; loop <= config.testConfig.loopCount; loop++) {
+    // 检查是否已取消
+    if (isCancelled()) {
+      throw new Error('任务已被用户取消');
+    }
+
     const loopDir = join(baseResultDir, loop.toString())
     await mkdir(loopDir, { recursive: true })
 
     // 步骤 6: 遍历框架
     for (const frameworkId of config.promptFrameworks) {
+      // 检查是否已取消
+      if (isCancelled()) {
+        throw new Error('任务已被用户取消');
+      }
       const framework = config.allFrameworks.find((f: any) => f.id === frameworkId)
       if (!framework) continue
 
@@ -209,6 +244,12 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
       };
 
       // console.log(`提示词模型: ${config.models.prompt}`);
+
+      // 检查是否已取消
+      if (isCancelled()) {
+        throw new Error('任务已被用户取消');
+      }
+
       const promptResult = await safeModelCall(config.models.prompt, promptGenMessages, promptOptions);
       currentTask++;
 
@@ -265,7 +306,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         // 从项目配置中获取MCP服务器地址
         const mcpServerUrl = config.project.mcpToolsCode && config.project.mcpToolsCode.trim()
           ? config.project.mcpToolsCode.trim() : '';
-        
+
         const workOptions: LlmGenerationOptions = {
           stream: false,
           timeoutMs: 90000,
@@ -285,6 +326,12 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
           }
         ];
         // console.log(`工作模型: ${config.models.work}`);
+
+        // 检查是否已取消
+        if (isCancelled()) {
+          throw new Error('任务已被用户取消');
+        }
+
         const workResult = await safeModelCall(config.models.work, workMessages, workOptions);
 
         // 累加token使用量
@@ -363,6 +410,12 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
             }
           ];
           // console.log(`评分模型: ${config.models.score}`);
+
+          // 检查是否已取消
+          if (isCancelled()) {
+            throw new Error('任务已被用户取消');
+          }
+
           const scoreResult = await safeModelCall(config.models.score, scoreGenMessages, scoreOptions);
 
           // 累加token使用量
