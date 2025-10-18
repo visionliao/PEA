@@ -198,7 +198,11 @@ export function RunResults() {
       models: {
         prompt: modelSettingsConfig.promptModel,
         work: modelSettingsConfig.workModel,
-        score: modelSettingsConfig.scoreModel
+        score: modelSettingsConfig.scoreModel,
+        // 包含模型参数
+        promptParams: modelSettingsConfig.promptModelParams,
+        workParams: modelSettingsConfig.workModelParams,
+        scoreParams: modelSettingsConfig.scoreModelParams
       },
       testCases: testCases, // 发送完整的测试用例数据
       testConfig: { 

@@ -185,15 +185,15 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
           content: promptMessage,
         }
       ];
-      const promptModelConfig = config.models.prompt;
+      const promptModelConfig = config.models.promptParams || {};
       const promptOptions: LlmGenerationOptions = {
         stream: false,
         timeoutMs: 90000,
-        maxOutputTokens: promptModelConfig.maxTokens,
-        temperature: promptModelConfig.temperature,
-        topP: promptModelConfig.top_p,
-        presencePenalty: promptModelConfig.presencePenalty,
-        frequencyPenalty: promptModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
+        maxOutputTokens: promptModelConfig.maxTokens?.[0] || 8192,
+        temperature: promptModelConfig.temperature?.[0] || 1.0,
+        topP: promptModelConfig.topP?.[0] || 1.0,
+        presencePenalty: promptModelConfig.presencePenalty?.[0] || 0.0,
+        frequencyPenalty: promptModelConfig.frequencyPenalty?.[0] || 0.0, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
         systemPrompt: promptString, // 系统提示词
         maxToolCalls: 10 // 最大工具调用次数
       };
@@ -245,7 +245,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         currentTask++;
         onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在回答问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } })
 
-        const workModelConfig = config.models.work;
+        const workModelConfig = config.models.workParams || {};
         // 从项目配置中获取MCP服务器地址
         const mcpServerUrl = config.project.mcpToolsCode && config.project.mcpToolsCode.trim()
           ? config.project.mcpToolsCode.trim() : '';
@@ -253,11 +253,11 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         const workOptions: LlmGenerationOptions = {
           stream: false,
           timeoutMs: 90000,
-          maxOutputTokens: workModelConfig.maxTokens,
-          temperature: workModelConfig.temperature,
-          topP: workModelConfig.top_p,
-          presencePenalty: workModelConfig.presencePenalty,
-          frequencyPenalty: workModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
+          maxOutputTokens: workModelConfig.maxTokens?.[0] || 8192,
+          temperature: workModelConfig.temperature?.[0] || 1.0,
+          topP: workModelConfig.topP?.[0] || 1.0,
+          presencePenalty: workModelConfig.presencePenalty?.[0] || 0.0,
+          frequencyPenalty: workModelConfig.frequencyPenalty?.[0] || 0.0, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
           mcpServerUrl: mcpServerUrl, // 从项目配置获取mcp服务器地址
           systemPrompt: finalSystemPrompt, // 系统提示词
           maxToolCalls: 10 // 最大工具调用次数
@@ -321,15 +321,15 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
           **模型的回答 (待评估对象):**
           ${modelAnswer}
           `;
-          const scoreModelConfig = config.models.score;
+          const scoreModelConfig = config.models.scoreParams || {};
           const scoreOptions: LlmGenerationOptions = {
             stream: false,
             timeoutMs: 90000,
-            maxOutputTokens: scoreModelConfig.maxTokens,
-            temperature: scoreModelConfig.temperature,
-            topP: scoreModelConfig.top_p,
-            presencePenalty: scoreModelConfig.presencePenalty,
-            frequencyPenalty: scoreModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
+            maxOutputTokens: scoreModelConfig.maxTokens?.[0] || 8192,
+            temperature: scoreModelConfig.temperature?.[0] || 1.0,
+            topP: scoreModelConfig.topP?.[0] || 1.0,
+            presencePenalty: scoreModelConfig.presencePenalty?.[0] || 0.0,
+            frequencyPenalty: scoreModelConfig.frequencyPenalty?.[0] || 0.0, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
             systemPrompt: scoreSystemPrompt, // 系统提示词
             maxToolCalls: 10 // 最大工具调用次数
           };
