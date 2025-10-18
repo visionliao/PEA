@@ -169,6 +169,13 @@ export function ProjectOverview() {
           setMcpTools([])
         }
 
+        // 设置MCP服务器地址
+        if (projectData.mcpToolsCode) {
+          setMcpToolsCode(projectData.mcpToolsCode)
+        } else {
+          setMcpToolsCode("")
+        }
+
         setIsEditMode(false) // 选择已存在的项目时，默认为查看模式
       } else {
         console.error("Failed to load project data")
@@ -250,7 +257,8 @@ export function ProjectOverview() {
           projectBackground: projectBackground.trim(),
           knowledgeBaseFiles: knowledgeBaseFiles,
           fileData: knowledgeBaseFileData,
-          mcpTools: mcpTools
+          mcpTools: mcpTools,
+          mcpToolsCode: mcpToolsCode
         }),
       })
 
@@ -325,6 +333,7 @@ export function ProjectOverview() {
           knowledgeBaseFiles: knowledgeBaseFiles,
           fileData: knowledgeBaseFileData,
           mcpTools: mcpTools,
+          mcpToolsCode: mcpToolsCode,
           force: true
         }),
       })

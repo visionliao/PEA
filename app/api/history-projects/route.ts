@@ -62,7 +62,8 @@ async function getProjectData(projectName: string) {
         methodParams: string
         description: string
         returnValue: string
-      }>
+      }>,
+      mcpToolsCode: ""
     }
 
     try {
@@ -115,6 +116,19 @@ async function getProjectData(projectName: string) {
         } catch (error) {
           console.error("Error parsing MCP Tools JSON:", error)
         }
+      }
+
+      // 提取MCP服务器地址
+      try {
+        const mcpServerMatch = projectContent.match(/## MCP 服务器地址\s*\n([\s\S]*?)(?=\n## |\n#|$)/)
+        if (mcpServerMatch) {
+          const mcpServerText = mcpServerMatch[1].trim()
+          if (mcpServerText && mcpServerText !== '无') {
+            projectData.mcpToolsCode = mcpServerText
+          }
+        }
+      } catch (error) {
+        console.error("Error parsing MCP server address:", error)
       }
     } catch (error) {
       console.error("Error reading project file:", error)

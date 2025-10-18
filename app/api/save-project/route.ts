@@ -5,7 +5,7 @@ import { join } from "path"
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { projectName, projectBackground, knowledgeBaseFiles, mcpTools, force } = body
+    const { projectName, projectBackground, knowledgeBaseFiles, mcpTools, mcpToolsCode, force } = body
 
     if (!projectName) {
       return NextResponse.json({ error: "项目名称不能为空" }, { status: 400 })
@@ -103,6 +103,9 @@ ${knowledgeBaseFiles.length > 0 ? knowledgeBaseFiles.map((file: string) => `- ${
 
 ## MCP Tools
 ${mcpTools.length > 0 ? '```json\n' + JSON.stringify(mcpToolsJson, null, 2) + '\n```' : '无'}
+
+## MCP 服务器地址
+${mcpToolsCode || '无'}
 
 ## 文件生成时间
 ${new Date().toLocaleString('zh-CN')}
