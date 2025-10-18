@@ -8,6 +8,12 @@ import { Label } from "@/components/ui/label"
 import { ModelParams } from "@/components/model-params"
 import { useAppStore } from "@/store/app-store"
 
+interface Model {
+  name: string;
+  provider: string;
+  color: string;
+}
+
 export function ModelSettings() {
   const {
     modelSettingsConfig: {
@@ -84,9 +90,19 @@ export function ModelSettings() {
   // 获取模型提供商显示名称
   const getModelProvider = (modelName: string) => {
     const model = (models || []).find(m => m.name === modelName)
-    if (!model) return ''
+    if (!model || !providers[model.provider]) return ''
     return providers[model.provider]?.displayName || ''
   }
+
+  // 辅助函数：格式化模型名称，用于在下拉列表中显示
+  const getModelDisplayName = (model: Model): string => {
+    const providerConfig = providers[model.provider];
+    if (!providerConfig) return model.name; // 如果找不到，则回退到完整名称
+
+    // 从完整名称中提取第一个冒号后面的模型部分
+    const modelNamePart = model.name.substring(model.name.indexOf(':') + 1);
+    return `${providerConfig.displayName}: ${modelNamePart}`;
+  };
 
   // 获取模型颜色
   const getModelColor = (modelName: string) => {

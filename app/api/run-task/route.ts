@@ -1,9 +1,8 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readFile, mkdir, writeFile, readdir } from 'fs/promises'
 import { join } from 'path'
-import { modelService } from '@/lib/model-service'
-import { createMessage, createMessages } from '@/lib/type-utils'
-import { LLMMessage } from '@/types/llm'
+import { handleChat } from '@/lib/llm/model-service';
+import { ChatMessage, LlmGenerationOptions, NonStreamingResult } from '@/lib/llm/types';
 
 // 安全调用大模型包装器，可以重试
 interface SafeCallResult {
@@ -13,8 +12,9 @@ interface SafeCallResult {
 }
 
 async function safeModelCall(
-  modelId: string,
-  messages: LLMMessage[],
+  selectedModel: string,
+  messages: ChatMessage[],
+  options: LlmGenerationOptions,
   retries = 2 // 默认重试2次
 ): Promise<SafeCallResult> {
   for (let i = 0; i <= retries; i++) {
@@ -25,22 +25,20 @@ async function safeModelCall(
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      const result = await modelService.call({
-        modelId: modelId,
-        request: { messages: messages }
-      });
+      const result = await handleChat(selectedModel, messages, options) as NonStreamingResult;
 
-      if (result.success && result.response) {
-        return { success: true, content: result.response.content };
+      if (result && typeof result.content === 'string') {
+        return { success: true, content: result.content };
       } else {
         // 记录非致命错误，但继续循环以重试
-        console.error(`[safeModelCall] Attempt ${i + 1} failed:`, result.error?.message);
+        const errorMessage = "Model call succeeded but returned unexpected format.";
+        console.error(`[safeModelCall] Attempt ${i + 1} failed:`, errorMessage, result);
         if (i === retries) { // 如果这是最后一次重试
-          return { success: false, error: result.error?.message || "Model call failed after retries" };
+          return { success: false, error: errorMessage };
         }
       }
     } catch (error: any) {
-      console.error(`[safeModelCall] Attempt ${i + 1} caught a critical error:`, error);
+      console.error(`[safeModelCall] Attempt ${i + 1} for ${selectedModel} caught a critical error:`, error);
       if (i === retries) { // 如果这是最后一次重试
         return { success: false, error: error.message || "A critical error occurred during model call" };
       }
@@ -77,7 +75,6 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   console.log("--- New Request Received ---");
-  console.log("HTTPS_PROXY Environment Variable:", process.env.HTTPS_PROXY || "NOT SET!");
 
   let config;
   try {
@@ -85,9 +82,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400 });
   }
-
-  // 在服务器端初始化 modelService
-  await modelService.initialize()
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -170,8 +164,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
       onProgress({ type: 'update', payload: { activeTaskMessage: `[${loop}/${config.testConfig.loopCount}] 为框架 [${framework.name}] 生成系统提示词...` } })
 
       // 步骤 2: 生成系统提示词
-      const promptGenMessages = createMessages.simple(
-        `请根据以下项目背景资料和提示词框架定义，为我生成一个高质量的系统提示词 (System Prompt)。
+      const promptString = `以下项目背景资料和提示词框架定义。
 
         **项目背景和资料:**
         ${promptGenContext}
@@ -184,13 +177,30 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         核心构成:
         ${framework.properties.map((p: any) => `- ${p.name}: ${p.description}`).join('\n')}
 
-        ---
-
-        你的任务是结合项目背景和框架定义，输出一个可以直接用于指导工作模型的系统提示词。只输出提示词内容，不要包含任何额外的解释或标题。`
-      );
+        ---`;
+      const promptMessage = '你的任务是结合项目背景和框架定义，为我生成一个高质量的系统提示词 (System Prompt)。严格根据提示词框架定义输出提示词内容，不要包含任何额外的解释或标题。';
+      const promptGenMessages: ChatMessage[] = [
+        {
+          role: 'user',
+          content: promptMessage,
+        }
+      ];
+      const promptModelConfig = config.models.prompt;
+      const promptOptions: LlmGenerationOptions = {
+        stream: false,
+        timeoutMs: 90000,
+        maxOutputTokens: promptModelConfig.maxTokens,
+        temperature: promptModelConfig.temperature,
+        topP: promptModelConfig.top_p,
+        presencePenalty: promptModelConfig.presencePenalty,
+        frequencyPenalty: promptModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
+        mcpServerUrl: 'http://127.0.0.1:8001', // mcp服务器地址
+        systemPrompt: promptString, // 系统提示词
+        maxToolCalls: 10 // 最大工具调用次数
+      };
 
       // console.log(`提示词模型: ${config.models.prompt}`);
-      const promptResult = await safeModelCall(config.models.prompt, promptGenMessages);
+      const promptResult = await safeModelCall(config.models.prompt, promptGenMessages, promptOptions);
       currentTask++;
 
       // 如果生成系统提示词失败，跳过这个框架
@@ -236,9 +246,27 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         currentTask++;
         onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在回答问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } })
 
-        const workMessages: LLMMessage[] = [createMessage.system(finalSystemPrompt), createMessage.user(testCase.question)];
+        const workModelConfig = config.models.work;
+        const workOptions: LlmGenerationOptions = {
+          stream: false,
+          timeoutMs: 90000,
+          maxOutputTokens: workModelConfig.maxTokens,
+          temperature: workModelConfig.temperature,
+          topP: workModelConfig.top_p,
+          presencePenalty: workModelConfig.presencePenalty,
+          frequencyPenalty: workModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
+          mcpServerUrl: 'http://127.0.0.1:8001', // mcp服务器地址
+          systemPrompt: finalSystemPrompt, // 系统提示词
+          maxToolCalls: 10 // 最大工具调用次数
+        };
+        const workMessages: ChatMessage[] = [
+          {
+            role: 'user',
+            content: testCase.question,
+          }
+        ];
         // console.log(`工作模型: ${config.models.work}`);
-        const workResult = await safeModelCall(config.models.work, workMessages);
+        const workResult = await safeModelCall(config.models.work, workMessages, workOptions);
         if (workResult.success) {
           modelAnswer = workResult.content!;
         } else {
@@ -251,8 +279,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         currentTask++;
         if (workResult.success) {
           onProgress({ type: 'update', payload: { activeTaskMessage: `[${framework.name}] 正在评估问题 ${testCase.id}...`, progress: (currentTask / totalTasks) * 100, currentTask: currentTask } });
-          const scoreMessages = createMessages.simple(
-            `你是一位极其严谨、注重事实的评估专家。你的任务是基于“标准答案”，评估“模型的回答”是否准确、完整地解决了用户的“问题”。
+          const scoreSystemPrompt = `你是一位极其严谨、注重事实的评估专家。你的任务是基于“标准答案”，评估“模型的回答”是否准确、完整地解决了用户的“问题”。
 
             请严格遵循以下【思考与评估步骤】：
 
@@ -276,22 +303,42 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
                 *   **0分**: 完全错误的回答，或者产生了有害的幻觉。
 
             **输出要求：**
-            在完成上述所有思考步骤后，最终只输出一个阿拉伯数字作为你的最终分数。不要包含任何解释、理由、标题或任何其他文字。
+            在完成上述所有思考步骤后，最终只输出一个阿拉伯数字作为你的最终分数。不要包含任何解释、理由、标题或任何其他文字。`;
 
-            ---
-            **问题:**
-            ${testCase.question}
+          const scoreMessage = `
+          ---
+          **问题:**
+          ${testCase.question}
 
-            ---
-            **标准答案 (参考事实来源):**
-            ${testCase.answer}
+          ---
+          **标准答案 (参考事实来源):**
+          ${testCase.answer}
 
-            ---
-            **模型的回答 (待评估对象):**
-            ${modelAnswer}`
-            );
+          ---
+          **模型的回答 (待评估对象):**
+          ${modelAnswer}
+          `;
+          const scoreModelConfig = config.models.score;
+          const scoreOptions: LlmGenerationOptions = {
+            stream: false,
+            timeoutMs: 90000,
+            maxOutputTokens: scoreModelConfig.maxTokens,
+            temperature: scoreModelConfig.temperature,
+            topP: scoreModelConfig.top_p,
+            presencePenalty: scoreModelConfig.presencePenalty,
+            frequencyPenalty: scoreModelConfig.frequencyPenalty, // 词汇丰富度,默认0，范围-2.0-2.0,值越大，用词越丰富多样；值越低，用词更朴实简单
+            mcpServerUrl: '', // mcp服务器地址
+            systemPrompt: scoreSystemPrompt, // 系统提示词
+            maxToolCalls: 0 // 最大工具调用次数
+          };
+          const scoreGenMessages: ChatMessage[] = [
+            {
+              role: 'user',
+              content: scoreMessage,
+            }
+          ];
           // console.log(`评分模型: ${config.models.score}`);
-          const scoreResult = await safeModelCall(config.models.score, scoreMessages);
+          const scoreResult = await safeModelCall(config.models.score, scoreGenMessages, scoreOptions);
 
           if (scoreResult.success) {
             score = parseInt(scoreResult.content!.trim().match(/\d+/)?.[0] || '0', 10);

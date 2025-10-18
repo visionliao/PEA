@@ -1,81 +1,112 @@
-import { NextRequest, NextResponse } from 'next/server'
+// app/api/mcp-test/route.ts
 
-// 定义从OpenAPI schema中解析出的参数类型
-interface ApiParameter {
-  title?: string;
-  type?: string;
-  description?: string;
-  default?: any;
+import { NextRequest, NextResponse } from 'next/server';
+import { ToolClient } from '@/lib/llm/tools/tool-client';
+
+interface TestRequestBody {
+  url: string;
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const url = searchParams.get('url')
+interface TestResponse {
+  status: 'ok' | 'error';
+  serverType: string;
+  url: string;
+  toolsCount: number;
+  tools?: unknown[];
+  message: string;
+  error?: string;
+  details?: string;
+}
 
-  if (!url) {
-    return NextResponse.json(
-      { error: 'Missing MCP server URL parameter' },
-      { status: 400 }
-    )
-  }
-
+// MCP服务器连通性测试
+export async function POST(request: NextRequest): Promise<NextResponse<TestResponse>> {
   try {
-    // 标准化 URL
-    let normalizedUrl = url.trim()
-    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
-      normalizedUrl = 'http://' + normalizedUrl
+    const body = await request.json() as TestRequestBody;
+    const url = body.url;
+
+    if (!url || typeof url !== 'string') {
+      return NextResponse.json({ 
+        status: 'error',
+        serverType: 'unknown',
+        url: url || '',
+        toolsCount: 0,
+        message: 'URL is required'
+      } as TestResponse, { status: 400 });
     }
 
-    // 确保 URL 以 / 结尾
-    if (!normalizedUrl.endsWith('/')) {
-      normalizedUrl += '/'
+    console.log(`--- [MCP Test] Testing connection to: ${url} ---`);
+
+    try {
+      // 使用ToolClient测试连接
+      const client = new ToolClient(url);
+
+      // 测试获取工具列表
+      const tools = await client.getToolsSchema();
+
+      // 验证至少有一个工具
+      if (!tools || tools.length === 0) {
+        throw new Error('No tools available on the server');
+      }
+
+      // 获取检测到的服务器类型
+      const detectedServerType = await client.getServerType();
+      const serverType = detectedServerType === 'fastmcp' ? 'FastMCP' :
+                        detectedServerType === 'fastapi' ? 'FastAPI' : 'Unknown';
+
+      const result: TestResponse = {
+        status: 'ok',
+        serverType,
+        url,
+        toolsCount: tools.length,
+        tools: tools.slice(0, 3), // 返回前3个工具作为示例
+        message: `Successfully connected to ${serverType} server with ${tools.length} tools`
+      };
+
+      return NextResponse.json(result, { status: 200 });
+    } catch (clientError) {
+      console.error('[MCP Test] ToolClient error:', clientError);
+      // 回退到简单的HTTP健康检查
+      try {
+        const targetUrl = url.endsWith('/sse') ? url.replace('/sse', '') : url;
+        const response = await fetch(targetUrl, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP status: ${response.status}`);
+        }
+
+        await response.json(); // 确保可以解析JSON
+        return NextResponse.json({
+          status: 'ok',
+          serverType: 'FastAPI (HTTP fallback)',
+          url,
+          toolsCount: 0,
+          message: 'Connected via HTTP fallback (ToolClient failed)'
+        } as TestResponse, { status: 200 });
+      } catch (httpError) {
+        const errorMessage = `Both ToolClient and HTTP fallback failed. ToolClient: ${(clientError as Error).message}, HTTP: ${httpError instanceof Error ? httpError.message : String(httpError)}`;
+        return NextResponse.json({ 
+          status: 'error',
+          serverType: 'unknown',
+          url,
+          toolsCount: 0,
+          message: 'Failed to connect to MCP server',
+          error: errorMessage,
+          details: errorMessage
+        } as TestResponse, { status: 500 });
+      }
     }
-
-    const toolsUrl = `${normalizedUrl}tools`
-    console.log(`Fetching tools from custom endpoint: ${toolsUrl}`)
-
-    // 连接到MCP服务器获取工具列表
-    const response = await fetch(toolsUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // 设置10秒超时
-      signal: AbortSignal.timeout(10000)
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`MCP server responded with ${response.status}:`, errorText)
-      throw new Error(`MCP server error: ${response.status} ${response.statusText}`)
-    }
-
-    const data = await response.json()
-    console.log('MCP server response:', data)
-    if (!data.success) {
-      throw new Error(data.error || 'Server returned an error while fetching tools')
-    }
-
-    return NextResponse.json({
-      success: true,
-      tools: data.tools,
-      serverUrl: normalizedUrl,
-    })
-  } catch (error: any) {
-    console.error('MCP server connection error:', error)
-    
-    let errorMessage = 'Failed to connect to MCP server'
-    if (error.name === 'AbortError') {
-      errorMessage = 'Connection timeout'
-    } else if (error.code === 'ECONNREFUSED') {
-      errorMessage = 'Connection refused'
-    } else {
-      errorMessage = error.message || errorMessage
-    }
-
-    return NextResponse.json(
-      { error: errorMessage, details: error.toString() },
-      { status: 500 }
-    )
+  } catch (error) {
+    console.error('MCP Test JSON Parse Error:', error);
+    return NextResponse.json({ 
+      status: 'error',
+      serverType: 'unknown',
+      url: '',
+      toolsCount: 0,
+      message: 'Invalid request format',
+      error: error instanceof Error ? error.message : String(error)
+    } as TestResponse, { status: 400 });
   }
 }
