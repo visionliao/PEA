@@ -8,6 +8,11 @@ import { ChatMessage, LlmGenerationOptions, NonStreamingResult } from '@/lib/llm
 interface SafeCallResult {
   success: boolean;
   content?: string;
+  tokenUsage?: {
+    total_tokens: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+  };
   error?: string;
 }
 
@@ -28,7 +33,11 @@ async function safeModelCall(
       const result = await handleChat(selectedModel, messages, options) as NonStreamingResult;
 
       if (result && typeof result.content === 'string') {
-        return { success: true, content: result.content };
+        return {
+          success: true,
+          content: result.content,
+          tokenUsage: result.usage
+        };
       } else {
         // 记录非致命错误，但继续循环以重试
         const errorMessage = "Model call succeeded but returned unexpected format.";
@@ -122,6 +131,7 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
   // 总任务数计算公式
   const totalTasks = (config.promptFrameworks.length + config.promptFrameworks.length * config.testCases.length * 2) * config.testConfig.loopCount;
   let currentTask = 0;
+  let totalTokenUsage = 0; // 累计token消耗
 
   // 步骤 1: 整合项目背景信息
   onProgress({ type: 'log', message: `正在加载项目 '${config.project.projectName}' 的背景资料...` })
@@ -202,6 +212,12 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
       const promptResult = await safeModelCall(config.models.prompt, promptGenMessages, promptOptions);
       currentTask++;
 
+      // 累加token使用量
+      if (promptResult.tokenUsage) {
+        totalTokenUsage += promptResult.tokenUsage.total_tokens;
+        onProgress({ type: 'token_usage', tokenUsage: totalTokenUsage });
+      }
+
       // 如果生成系统提示词失败，跳过这个框架
       if (!promptResult.success) {
         console.error(`FATAL: Failed to generate system prompt for framework [${framework.name}]. Skipping this framework. Error: ${promptResult.error}`);
@@ -270,6 +286,13 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
         ];
         // console.log(`工作模型: ${config.models.work}`);
         const workResult = await safeModelCall(config.models.work, workMessages, workOptions);
+
+        // 累加token使用量
+        if (workResult.tokenUsage) {
+          totalTokenUsage += workResult.tokenUsage.total_tokens;
+          onProgress({ type: 'token_usage', tokenUsage: totalTokenUsage });
+        }
+
         if (workResult.success) {
           modelAnswer = workResult.content!;
         } else {
@@ -341,6 +364,12 @@ async function runTask(config: any, baseResultDir: string, onProgress: (data: ob
           ];
           // console.log(`评分模型: ${config.models.score}`);
           const scoreResult = await safeModelCall(config.models.score, scoreGenMessages, scoreOptions);
+
+          // 累加token使用量
+          if (scoreResult.tokenUsage) {
+            totalTokenUsage += scoreResult.tokenUsage.total_tokens;
+            onProgress({ type: 'token_usage', tokenUsage: totalTokenUsage });
+          }
 
           if (scoreResult.success) {
             score = parseInt(scoreResult.content!.trim().match(/\d+/)?.[0] || '0', 10);

@@ -15,6 +15,7 @@ export function RunResults() {
   const [testCasesCount, setTestCasesCount] = useState(0)
   const [showValidationDialog, setShowValidationDialog] = useState(false)
   const [validationMessage, setValidationMessage] = useState("")
+  const [totalTokenUsage, setTotalTokenUsage] = useState(0)
   // EventSource 的引用，用于管理连接
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -150,6 +151,8 @@ export function RunResults() {
       setShowValidationDialog(true)
       return
     }
+    // 重置token消耗计数
+    setTotalTokenUsage(0)
     handleRun()
   }
 
@@ -263,6 +266,9 @@ export function RunResults() {
                 break;
               case 'state_update':
                 updateCurrentRunState(data.payload);
+                break;
+              case 'token_usage':
+                setTotalTokenUsage(data.tokenUsage);
                 break;
               case 'done':
                 setActiveTaskMessage(data.message);
@@ -495,9 +501,17 @@ export function RunResults() {
 
         {/* Results section */}
         <div className="space-y-4">
-          <div>
-            <Label className="text-base font-medium text-foreground">运行结果</Label>
-            <p className="text-sm text-muted-foreground mt-1">当前正在运行的详细情况</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <Label className="text-base font-medium text-foreground">运行结果</Label>
+              <p className="text-sm text-muted-foreground mt-1">当前正在运行的详细情况</p>
+            </div>
+            {totalTokenUsage > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-lg border border-border">
+                <span className="text-sm text-muted-foreground">Token消耗：</span>
+                <span className="text-sm font-medium text-foreground">{totalTokenUsage.toLocaleString()}</span>
+              </div>
+            )}
           </div>
 
           {runStatus?.error && (
