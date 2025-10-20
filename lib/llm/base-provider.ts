@@ -5,6 +5,7 @@ import {
   BaseProviderConfig,
   LlmProviderResponse,
   TokenUsage,
+  DurationUsage,
   StreamingResult,
   NonStreamingResult
 } from './types';
@@ -46,6 +47,13 @@ export abstract class BaseChatProvider {
       total_tokens: 0,
     };
     console.log('[TokenCount] 初始token计数:', totalUsage);
+    // 初始化耗时累加器
+    let totalDuration: DurationUsage = {
+        total_duration: 0,
+        load_duration: 0,
+        prompt_eval_duration: 0,
+        eval_duration: 0,
+    };
 
     console.log('本次对话已循环次数:', toolCallCount);
     while (toolCallCount < MAX_TOOL_CALLS) {
@@ -83,8 +91,13 @@ export abstract class BaseChatProvider {
       // 收到响应后，清除定时器
       if (timeoutId) clearTimeout(timeoutId);
 
+      // 使用类型守卫来判断是否为 StreamingResult
+      function isStreamingResult(response: any): response is StreamingResult {
+          return response && response.stream instanceof ReadableStream;
+      }
+
       // 4. 根据模式和响应类型判断是否结束循环
-      if (llmResponse.hasOwnProperty('stream') && llmResponse.hasOwnProperty('finalUsagePromise')) {
+      if (isStreamingResult(llmResponse)) {
       // if (isStreaming && llmResponse instanceof ReadableStream) {
         // console.log("接收流式输出文本流，判定流程结束，开始进行最终的异步流式输出。");
         // return llmResponse; // 流式模式下，收到流就直接返回
@@ -107,7 +120,7 @@ export abstract class BaseChatProvider {
             }
 
             // 在控制台打印最终的、完整的总账单（用于调试）
-            console.log("[TokenCount] 所有步骤完成后的最终总用量:", JSON.stringify(totalUsage, null, 2));
+            console.log("[TokenCount] 所有步骤完成后的最终token消耗情况:", JSON.stringify(totalUsage, null, 2));
 
             // 将包含了所有步骤总和的、最终的 totalUsage 对象，作为这个新 Promise 的结果
             resolve(totalUsage);
@@ -118,11 +131,31 @@ export abstract class BaseChatProvider {
           }
         });
 
+        // 异步等待耗时数据
+        const finalDurationAccumulationPromise: Promise<DurationUsage> = new Promise(async (resolve, reject) => {
+          try {
+            const finalStepDuration = await streamingResult.finalDurationPromise;
+            if (finalStepDuration) {
+                totalDuration.total_duration += finalStepDuration.total_duration;
+                totalDuration.load_duration += finalStepDuration.load_duration;
+                totalDuration.prompt_eval_duration += finalStepDuration.prompt_eval_duration;
+                totalDuration.eval_duration += finalStepDuration.eval_duration;
+            }
+            console.log("[DurationCount] 所有步骤完成后的最终耗时情况:", JSON.stringify(totalDuration, null, 2));
+            resolve(totalDuration);
+          } catch (e) {
+              console.error("[DurationCount] 在累加最终流式耗时发生错误:", e);
+              reject(new Error("Failed to accumulate final duration."));
+          }
+        });
+
         // 立即返回 streamingResult 的通道，相当于一个引用地址，使用者实时从这个地址获取流数据。
         // 并且等待最终token统计结果数据，然后进行累加的最终token总消耗结果
+        // 并且等待最终耗时统计结果数据...
         return {
           stream: streamingResult.stream,
-          finalUsagePromise: finalAccumulationPromise
+          finalUsagePromise: finalAccumulationPromise,
+          finalDurationPromise: finalDurationAccumulationPromise,
         };
       }
 
@@ -138,8 +171,19 @@ export abstract class BaseChatProvider {
       } else {
         console.warn(`[TokenCount] Warning: Step ${toolCallCount + 1} did not return usage information.`);
       }
-      const toolCalls = llmProviderResponse.tool_calls;
+      // 累加每一步的耗时 (工具调用 或 非流式最终回复)
+      if (llmProviderResponse.duration) {
+        console.log(`[DurationCount] 第 ${toolCallCount + 1} 步耗时信息:`, llmProviderResponse.duration);
+        totalDuration.total_duration += llmProviderResponse.duration.total_duration;
+        totalDuration.load_duration += llmProviderResponse.duration.load_duration;
+        totalDuration.prompt_eval_duration += llmProviderResponse.duration.prompt_eval_duration;
+        totalDuration.eval_duration += llmProviderResponse.duration.eval_duration;
+        console.log(`[DurationCount] 当前累积总耗时:`, totalDuration);
+      } else {
+        console.warn(`[DurationCount] Warning: Step ${toolCallCount + 1} did not return duration information.`);
+      }
 
+      const toolCalls = llmProviderResponse.tool_calls;
       if (!toolCalls || toolCalls.length === 0) {
         // 两种模式下，没有工具调用都意味着流程结束
         // 非流式直接返回内容，流式理论上应该在前一步返回流，但作为兜底
@@ -147,6 +191,7 @@ export abstract class BaseChatProvider {
         return {
           content: llmProviderResponse.content || "",
           usage: totalUsage,
+          duration: totalDuration,
         };
       }
 

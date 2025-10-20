@@ -9,7 +9,8 @@ import {
   ToolCall,
   LlmProviderResponse,
   StreamingResult,
-  TokenUsage
+  TokenUsage,
+  DurationUsage
 } from '../types';
 import { McpToolSchema } from '../tools/tool-client';
 
@@ -22,6 +23,16 @@ const paramMapping: { [K in keyof LlmGenerationOptions]?: string } = {
   presencePenalty: 'presence_penalty',
   frequencyPenalty: 'frequency_penalty',
 };
+
+// 从Ollama响应中提取耗时
+function extractDuration(response: ChatResponse): DurationUsage {
+  return {
+    total_duration: response.total_duration ?? 0,
+    load_duration: response.load_duration ?? 0,
+    prompt_eval_duration: response.prompt_eval_duration ?? 0,
+    eval_duration: response.eval_duration ?? 0,
+  };
+}
 
 export class OllamaChatProvider extends BaseChatProvider {
   private ollama: Ollama;
@@ -177,6 +188,8 @@ export class OllamaChatProvider extends BaseChatProvider {
           completion_tokens: finalResponse.eval_count ?? 0,
           total_tokens: (finalResponse.prompt_eval_count ?? 0) + (finalResponse.eval_count ?? 0),
         };
+        // 提取耗时数据
+        const duration: DurationUsage = extractDuration(finalResponse);
 
         // 4. 将 Ollama 的工具调用格式转换为 ToolCall[] 格式
         const toolCalls: ToolCall[] = toolCallsInPart.map((tc, index) => ({
@@ -194,6 +207,7 @@ export class OllamaChatProvider extends BaseChatProvider {
           content: finalResponse.message.content || null,
           tool_calls: toolCalls,
           usage: usage,
+          duration: duration,
         };
       } else {
         // 普通文本流，表示没有工具调用，或者工具调用完毕这是大模型最终的回复
@@ -203,6 +217,11 @@ export class OllamaChatProvider extends BaseChatProvider {
         let finalUsageResolver: (usage: TokenUsage | undefined) => void;
         const finalUsagePromise = new Promise<TokenUsage | undefined>(resolve => {
           finalUsageResolver = resolve;
+        });
+        // 耗时信息的 Promise
+        let finalDurationResolver: (duration: DurationUsage | undefined) => void;
+        const finalDurationPromise = new Promise<DurationUsage | undefined>(resolve => {
+            finalDurationResolver = resolve;
         });
 
         // 将 Ollama SDK 的流转换为标准的 Web ReadableStream
@@ -237,12 +256,17 @@ export class OllamaChatProvider extends BaseChatProvider {
                   total_tokens: (finalResponse.prompt_eval_count ?? 0) + (finalResponse.eval_count ?? 0),
                 };
                 finalUsageResolver(usage);
+                // 解析耗时Promise
+                const duration: DurationUsage = extractDuration(finalResponse);
+                finalDurationResolver(duration);
               } else {
                 finalUsageResolver(undefined); // 异常情况
+                finalDurationResolver(undefined);
               }
             } catch (e) {
                 console.error("Ollama stream processing error:", e);
                 finalUsageResolver(undefined);
+                finalDurationResolver(undefined);
                 controller.error(e);
             } finally {
                 controller.close();
@@ -252,7 +276,8 @@ export class OllamaChatProvider extends BaseChatProvider {
         // 返回大模型回复的文本流和token消耗统计结构体
         return {
           stream: stream,
-          finalUsagePromise: finalUsagePromise
+          finalUsagePromise: finalUsagePromise,
+          finalDurationPromise: finalDurationPromise
         };
       }
     } catch (error: any) {
@@ -308,6 +333,8 @@ export class OllamaChatProvider extends BaseChatProvider {
         // 对于 Ollama，total 就是两者之和
         total_tokens: (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
       };
+      // 提取耗时数据
+      const duration: DurationUsage = extractDuration(response);
 
       const toolCalls: ToolCall[] | undefined = responseMessage.tool_calls?.map((tc, index) => ({
         // Ollama 不提供ID，创建一个
@@ -324,6 +351,7 @@ export class OllamaChatProvider extends BaseChatProvider {
         content: responseMessage.content,
         tool_calls: toolCalls,
         usage: usage,
+        duration: duration,
       };
     } catch (error: any) {
       if (error.name === 'AbortError') {
